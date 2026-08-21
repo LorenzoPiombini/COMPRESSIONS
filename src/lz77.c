@@ -4,8 +4,21 @@
 #include <stdint.h>
 #include "lz77.h"
 
+
+/*Compressed block tables as per RFC-1951*/
+static const uint16_t length_base[29] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258};
+static const uint8_t length_extra[29] = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0};
+static const uint16_t distance_base[30] = {1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577};
+static const uint8_t distance_extra[30] = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13};
+static uint16_t len_to_code[259];
+static uint16_t dist_to_code_low[257];
+static uint16_t dist_to_code_rest[256];
+
 static uint32_t hash3(uint8_t *p);
-static void insert(struct LZstate *state,uint8_t *p, uint64_t pos);
+static void insert(struct LZstate *state,uint8_t *p, uint64_t pos, uint64_t size);
+static void gen_len_to_code_table(uint16_t *table);
+static uint8_t dist_code(uint32_t d);
+static uint16_t len_code(uint16_t l);
 
 static uint32_t hash3(uint8_t *p)
 {
@@ -26,6 +39,59 @@ static void insert(struct LZstate *state,uint8_t *p, uint64_t pos, uint64_t size
 	state->head[h] = (int32_t)pos;
 }
 
+static void gen_len_to_code_table(uint16_t *table)
+{
+	for(uint16_t i = 0; i < 29; i++){
+		uint16_t hi = (i == 28) ? 258 : length_base[i+1] - 1;
+		for(uint16_t len = length_base[i]; len <= hi; len++){
+			table[len] = 257+i;
+		}
+	}
+}
+
+static uint16_t len_code(uint16_t l)
+{
+	return len_to_code[l];
+}
+
+static void gen_dist_to_code_tables(uint16_t *lo_table, uint16_t *hi_table)
+{
+	for(int i = 0; i < 30; i++){
+		uint32_t hi = (i == 29) ? WINDOW_SIZE : distance_base[i+1] -1;	
+		for(uint32_t dist = distance_base[i]; dist <= hi; dist++){
+			if(dist <= 256){
+				dist_to_code_low[dist] = i; 
+			}else{
+				dist_to_code_rest[(dist - 1 ) >> 7] =  i;
+			}
+		}
+	}
+}
+
+static uint8_t dist_code(uint32_t d)
+{
+	return (d <= 256) ? dist_to_code_low[d] : dist_to_code_rest[(d-1)>>7];
+}
+
+int debug_tb(){
+	gen_len_to_code_table(len_to_code);
+	for(int len = 3; len <= 258; len++){
+		int c = len_code(len);
+		int i = c - 257;
+		int lo = length_base[i];
+		int hi = (i == 28) ? 258 : length_base[i] + (1 << length_extra[i]) - 1;
+		if(len < lo || len > hi) printf("BAD len %d -> code %d\n", len, c);
+	}
+
+	gen_dist_to_code_tables(dist_to_code_low,dist_to_code_rest);
+	for(int dist = 1; dist <= 32768; dist++){
+		int c = dist_code(dist);
+		int lo = distance_base[c];
+		int hi = (c == 29) ? 32768 : distance_base[c] + (1 << distance_extra[c]) - 1;
+		if(dist < lo || dist > hi) printf("BAD dist %d -> code %d\n", dist, c);
+	}
+	return 0;
+}
 void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist)
 {
 	uint64_t best_distance = 0, best_length = 0;
@@ -86,7 +152,7 @@ int LZ77_binary(uint8_t *input,struct LDpair **pairs)
 		uint16_t step = (len == 0 ) ? 1 : len;
 		for(uint64_t k = 0; k < step; k++){
 			if(bread + k + MIN_MATCH <= input_size){
-				insert(&state,input,bread+k);
+				insert(&state,input,bread+k,input_size - bread);
 			}
 		}
 

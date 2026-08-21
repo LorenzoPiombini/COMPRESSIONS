@@ -21,6 +21,7 @@ struct LDpair {
 	uint8_t literal;
 };
 
+int debug_tb();
 void LZstate_init(struct LZstate *state);
 void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 int LZ77_binary(uint8_t *input,struct LDpair **pairs);

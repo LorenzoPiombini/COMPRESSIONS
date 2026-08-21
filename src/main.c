@@ -50,6 +50,7 @@ int main(){
 	if(memcmp(i,decoded,input_size) == 0){
 		printf("inpunt and decoded are acutally equal.\ntest passed!\n");
 	}
+	debug_tb();
 	return 0;
 
 }
