@@ -13,13 +13,14 @@ static uint32_t hash3(uint8_t *p)
 }
 
 void LZstate_init(struct LZstate *state)
-{
+{	
 	memset(state->head,0xFF,sizeof state->head);
 	state->max_chain = MAX_CHAIN;
 }
 
-static void insert(struct LZstate *state,uint8_t *p, uint64_t pos)
+static void insert(struct LZstate *state,uint8_t *p, uint64_t pos, uint64_t size)
 {
+	if((pos + MIN_MATCH) > size) return;
 	uint32_t h = hash3(p+pos);
 	state->prev[pos & (WINDOW_SIZE - 1)] = state->head[h];
 	state->head[h] = (int32_t)pos;
@@ -49,7 +50,7 @@ void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, 
 		if(current_l > best_length){
 			best_length = current_l;
 			best_distance = dist; 
-			if(current_l == dist) break;
+			if(current_l == max_len) break;
 		}
 		cand = state->prev[cand & (WINDOW_SIZE -1)];
 	}
@@ -77,7 +78,7 @@ int LZ77_binary(uint8_t *input,struct LDpair **pairs)
 			if(!np) return -1;
 			pairs_size = (uint64_t*)np;
 			*pairs = (struct LDpair*)(pairs_size + 1);
-			*pairs_size = *pairs_size * 2 + sizeof(uint64_t);
+			*pairs_size = *pairs_size * 2;
 		}
 
 		uint16_t dist,len;
