@@ -44,7 +44,10 @@ int main(){
 	free(pairs);
 	free(i_bin);
 
-
+	struct Hnode n[MAX_LIT_TREE] = {0};
+	struct Heap_literal h = {0};
+	int16_t root = lit_tree(lit_freq,n,&h);
+	printf("root is %d\n",root);
 	if(memcmp(i,decoded,input_size) == 0){
 		printf("inpunt and decoded are acutally equal.\ntest passed!\n");
 	}

@@ -16,14 +16,8 @@ static uint16_t dist_to_code_low[257];
 static uint16_t dist_to_code_rest[256];
 /* ------------------------------------------------------ */
 
-/* ------ Huffman tree -----------*/
-
-static struct Hnode literal_tree[MAX_LIT_TREE] = {0};
-static struct Hnode dist_tree[MAX_DIST_TREE] = {0};
-
-/*--------------------------------*/
 static uint32_t hash3(uint8_t *p);
-static void insert(struct LZstate *state,uint8_t *p, uint64_t pos, uint64_t size);
+static void insert(struct LZstate *state,uint8_t *p, uint64_t pos);
 static void gen_len_to_code_table(uint16_t *table);
 static uint8_t dist_code(uint32_t d);
 static uint16_t len_code(uint16_t l);
@@ -39,6 +33,61 @@ static void sift_heap_down_L(struct Heap_literal *h,int i);
 static void sift_heap_down_D(struct Heap_distance *h,int i);
 static void sift_heap_up_L(struct Heap_literal *h,int i);
 static void sift_heap_up_D(struct Heap_distance *h,int i);
+static int16_t heap_pop_L(struct Heap_literal *h);
+static int16_t heap_pop_D(struct Heap_distance *h);	
+static void heap_push_L(struct Heap_literal *h,int16_t i);
+static void heap_push_D(struct Heap_distance *h,int16_t i);	
+
+
+static int16_t heap_pop_L(struct Heap_literal *h)
+{
+	int16_t top = h->idx[0]; 
+	h->idx[0] = h->idx[--h->size];
+	if(h->size) sift_heap_down_L(h,0);
+	return top;
+}
+
+static int16_t heap_pop_D(struct Heap_distance *h)
+{
+	int16_t top = h->idx[0]; 
+	h->idx[0] = h->idx[--h->size];
+	if(h->size) sift_heap_down_D(h,0);
+	return top;
+
+}
+
+static void heap_push_L(struct Heap_literal *h,int16_t i)
+{
+	h->idx[h->size++] = i; 
+	sift_heap_up_L(h,h->size -1);
+}
+static void heap_push_D(struct Heap_distance *h,int16_t i)
+{
+	h->idx[h->size++] = i; 
+	sift_heap_up_D(h,h->size -1);
+}
+
+
+
+static void sift_heap_up_L(struct Heap_literal *h,int i)
+{
+	while(i > 0){
+		int p = (i -1) / 2;
+		if(heap_freq_L(h,p) <= heap_freq_L(h,i)) return;
+		heap_swap_L(h, i, p);
+		i = p;
+	}
+}
+
+static void sift_heap_up_D(struct Heap_distance *h,int i)
+{
+	while(i > 0){
+		int p = (i -1) / 2;
+		if(heap_freq_D(h,p) <= heap_freq_D(h,i)) return;
+		heap_swap_D(h, i, p);
+		i = p;
+	}
+}
 
 static void sift_heap_down_D(struct Heap_distance *h,int i)
 {
@@ -71,15 +120,15 @@ static void sift_heap_down_L(struct Heap_literal *h,int i)
 static void heap_swap_L(struct Heap_literal *h,int a, int b)
 {
 	int16_t t = h->idx[a];
-	h->idx[b] = h->idx[a];
-	h->idx[a] = t;
+	h->idx[a] = h->idx[b];
+	h->idx[b] = t;
 }
 
 static void heap_swap_D(struct Heap_distance *h,int a, int b)
 {
 	int16_t t = h->idx[a];
-	h->idx[b] = h->idx[a];
-	h->idx[a] = t;
+	h->idx[a] = h->idx[b];
+	h->idx[b] = t;
 }
 
 static uint32_t heap_freq_D(struct Heap_distance *h,int a)
@@ -103,9 +152,8 @@ void LZstate_init(struct LZstate *state)
 	state->max_chain = MAX_CHAIN;
 }
 
-static void insert(struct LZstate *state,uint8_t *p, uint64_t pos, uint64_t size)
+static void insert(struct LZstate *state,uint8_t *p, uint64_t pos)
 {
-	if((pos + MIN_MATCH) > size) return;
 	uint32_t h = hash3(p+pos);
 	state->prev[pos & (WINDOW_SIZE - 1)] = state->head[h];
 	state->head[h] = (int32_t)pos;
@@ -167,7 +215,7 @@ int debug_tb(){
 
 
 
-static void lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
+int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
 {
 	int n_count = 0;
 	for(int i = 0; i < 286; i++){
@@ -180,10 +228,23 @@ static void lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
 		n_count++;
 	}
 	h->size = n_count;
-	*(*h).nodes = *n;
+	(*h).nodes = n;
 
 	for(int i = h->size/2 -1 ; i >= 0; i --)
 		sift_heap_down_L(h,i);
+
+	while(h->size > 1){
+		int16_t a = heap_pop_L(h);
+		int16_t b = heap_pop_L(h);
+		int16_t p = n_count++;
+		n[p].freq = n[a].freq + n[b].freq;
+		n[p].left = a;
+		n[p].rigth = b;
+		n[p].symbol = 0xffff;
+		heap_push_L(h,p);
+	}
+
+	return heap_pop_L(h);/*root*/
 }
 void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq)
 {
@@ -266,7 +327,7 @@ int LZ77_binary(uint8_t *input,struct LDpair **pairs)
 		uint16_t step = (len == 0 ) ? 1 : len;
 		for(uint64_t k = 0; k < step; k++){
 			if(bread + k + MIN_MATCH <= input_size){
-				insert(&state,input,bread+k,input_size - bread);
+				insert(&state,input,bread+k);
 			}
 		}
 
