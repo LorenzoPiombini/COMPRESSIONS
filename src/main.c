@@ -37,20 +37,16 @@ int main(){
 	uint8_t decoded[input_size];
 	memset(decoded,0,input_size);
 	decode_LZ77(p,tokens,decoded);
+	uint32_t lit_freq[286] = {0};
+	uint32_t dist_freq[30] = {0};
+
+	count_frequency(p, tokens,lit_freq,dist_freq);
 	free(pairs);
 	free(i_bin);
 
-	printf("output decoded:\n");
-	int j;
-	for(j = 0 ; j < input_size; j++){
-		printf("%c",decoded[j]);
-	}
-	printf("\n\n%d bytes\n",j);
 
 	if(memcmp(i,decoded,input_size) == 0){
 		printf("inpunt and decoded are acutally equal.\ntest passed!\n");
 	}
-	debug_tb();
 	return 0;
-
 }

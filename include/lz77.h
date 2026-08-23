@@ -33,13 +33,13 @@ struct Hnode{
 struct Heap_literal{
 	uint16_t idx[MAX_LIT_TREE];
 	int16_t size;
-	struct Hnode *nodes
+	struct Hnode *nodes;
 };
 
 struct Heap_distance{
 	uint16_t idx[MAX_DIST_TREE];
 	int16_t size;
-	struct Hnode *nodes
+	struct Hnode *nodes;
 };
 
 int debug_tb();

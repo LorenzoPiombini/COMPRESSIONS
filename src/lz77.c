@@ -32,10 +32,10 @@ static int is_node_empty(struct Hnode *n);
 /*---- Heap tree functions -----*/
 
 static void heap_swap_L(struct Heap_literal *h,int a, int b);
-static uint32_t heap_freq_L(struct Heap_literal *h,int a);
-static void sift_heap_down_L(struct Heap_literal *h,int i);
 static void heap_swap_D(struct Heap_distance *h,int a, int b);
+static uint32_t heap_freq_L(struct Heap_literal *h,int a);
 static uint32_t heap_freq_D(struct Heap_distance *h,int a);
+static void sift_heap_down_L(struct Heap_literal *h,int i);
 static void sift_heap_down_D(struct Heap_distance *h,int i);
 static void sift_heap_up_L(struct Heap_literal *h,int i);
 static void sift_heap_up_D(struct Heap_distance *h,int i);
@@ -43,9 +43,9 @@ static void sift_heap_up_D(struct Heap_distance *h,int i);
 static void sift_heap_down_D(struct Heap_distance *h,int i)
 {
 	for(;;){
-		int left = i*2+1;
-		int right = i*2+2;
-		small = i;
+		int l = i*2+1;
+		int r = i*2+2;
+		int small = i;
 		if(l < h->size && heap_freq_D(h,l) < heap_freq_D(h,small)) small = l;
 		if(r < h->size && heap_freq_D(h,r) < heap_freq_D(h,small)) small = r;
 		if(small == i) return;
@@ -57,9 +57,9 @@ static void sift_heap_down_D(struct Heap_distance *h,int i)
 static void sift_heap_down_L(struct Heap_literal *h,int i)
 {
 	for(;;){
-		int left = i*2+1;
-		int right = i*2+2;
-		small = i;
+		int l = i*2+1;
+		int r = i*2+2;
+		int small = i;
 		if(l < h->size && heap_freq_L(h,l) < heap_freq_L(h,small)) small = l;
 		if(r < h->size && heap_freq_L(h,r) < heap_freq_L(h,small)) small = r;
 		if(small == i) return;
@@ -68,18 +68,18 @@ static void sift_heap_down_L(struct Heap_literal *h,int i)
 	}
 }
 
-static void heap_swap_L(struct Heap_literal,int a, int b)
+static void heap_swap_L(struct Heap_literal *h,int a, int b)
 {
-	int16_t t = h->inx[a];
-	h->inx[b] = h->inx[a];
-	h->inx[a] = t;
+	int16_t t = h->idx[a];
+	h->idx[b] = h->idx[a];
+	h->idx[a] = t;
 }
 
-static void heap_swap_D(struct Heap_distance,int a, int b)
+static void heap_swap_D(struct Heap_distance *h,int a, int b)
 {
-	int16_t t = h->inx[a];
-	h->inx[b] = h->inx[a];
-	h->inx[a] = t;
+	int16_t t = h->idx[a];
+	h->idx[b] = h->idx[a];
+	h->idx[a] = t;
 }
 
 static uint32_t heap_freq_D(struct Heap_distance *h,int a)
@@ -87,7 +87,7 @@ static uint32_t heap_freq_D(struct Heap_distance *h,int a)
 	return h->nodes[h->idx[a]].freq;
 }
 
-static uint32_t heap_freq_L(struct Heap_literal *h,int a);
+static uint32_t heap_freq_L(struct Heap_literal *h,int a)
 {
 	return h->nodes[h->idx[a]].freq;
 }
@@ -180,7 +180,7 @@ static void lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
 		n_count++;
 	}
 	h->size = n_count;
-	*(*h).node = *n;
+	*(*h).nodes = *n;
 
 	for(int i = h->size/2 -1 ; i >= 0; i --)
 		sift_heap_down_L(h,i);
