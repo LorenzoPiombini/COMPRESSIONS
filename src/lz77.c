@@ -5,7 +5,8 @@
 #include "lz77.h"
 
 
-/*Compressed block tables as per RFC-1951*/
+/* --------- Compressed block tables as per RFC-1951  -----*/
+
 static const uint16_t length_base[29] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258};
 static const uint8_t length_extra[29] = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0};
 static const uint16_t distance_base[30] = {1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577};
@@ -13,12 +14,83 @@ static const uint8_t distance_extra[30] = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8
 static uint16_t len_to_code[259];
 static uint16_t dist_to_code_low[257];
 static uint16_t dist_to_code_rest[256];
+/* ------------------------------------------------------ */
 
+/* ------ Huffman tree -----------*/
+
+static struct Hnode literal_tree[MAX_LIT_TREE] = {0};
+static struct Hnode dist_tree[MAX_DIST_TREE] = {0};
+
+/*--------------------------------*/
 static uint32_t hash3(uint8_t *p);
 static void insert(struct LZstate *state,uint8_t *p, uint64_t pos, uint64_t size);
 static void gen_len_to_code_table(uint16_t *table);
 static uint8_t dist_code(uint32_t d);
 static uint16_t len_code(uint16_t l);
+static int is_node_empty(struct Hnode *n);
+
+/*---- Heap tree functions -----*/
+
+static void heap_swap_L(struct Heap_literal *h,int a, int b);
+static uint32_t heap_freq_L(struct Heap_literal *h,int a);
+static void sift_heap_down_L(struct Heap_literal *h,int i);
+static void heap_swap_D(struct Heap_distance *h,int a, int b);
+static uint32_t heap_freq_D(struct Heap_distance *h,int a);
+static void sift_heap_down_D(struct Heap_distance *h,int i);
+static void sift_heap_up_L(struct Heap_literal *h,int i);
+static void sift_heap_up_D(struct Heap_distance *h,int i);
+
+static void sift_heap_down_D(struct Heap_distance *h,int i)
+{
+	for(;;){
+		int left = i*2+1;
+		int right = i*2+2;
+		small = i;
+		if(l < h->size && heap_freq_D(h,l) < heap_freq_D(h,small)) small = l;
+		if(r < h->size && heap_freq_D(h,r) < heap_freq_D(h,small)) small = r;
+		if(small == i) return;
+		heap_swap_D(h,i,small);
+		i = small;
+	}
+}
+
+static void sift_heap_down_L(struct Heap_literal *h,int i)
+{
+	for(;;){
+		int left = i*2+1;
+		int right = i*2+2;
+		small = i;
+		if(l < h->size && heap_freq_L(h,l) < heap_freq_L(h,small)) small = l;
+		if(r < h->size && heap_freq_L(h,r) < heap_freq_L(h,small)) small = r;
+		if(small == i) return;
+		heap_swap_L(h,i,small);
+		i = small;
+	}
+}
+
+static void heap_swap_L(struct Heap_literal,int a, int b)
+{
+	int16_t t = h->inx[a];
+	h->inx[b] = h->inx[a];
+	h->inx[a] = t;
+}
+
+static void heap_swap_D(struct Heap_distance,int a, int b)
+{
+	int16_t t = h->inx[a];
+	h->inx[b] = h->inx[a];
+	h->inx[a] = t;
+}
+
+static uint32_t heap_freq_D(struct Heap_distance *h,int a)
+{
+	return h->nodes[h->idx[a]].freq;
+}
+
+static uint32_t heap_freq_L(struct Heap_literal *h,int a);
+{
+	return h->nodes[h->idx[a]].freq;
+}
 
 static uint32_t hash3(uint8_t *p)
 {
@@ -92,6 +164,48 @@ int debug_tb(){
 	}
 	return 0;
 }
+
+
+
+static void lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
+{
+	int n_count = 0;
+	for(int i = 0; i < 286; i++){
+		if(lit_freq[i] == 0) continue;
+		n[n_count].symbol = i;
+		n[n_count].freq = lit_freq[i];
+		n[n_count].left = -1;
+		n[n_count].rigth = -1;
+		h->idx[n_count] = n_count;
+		n_count++;
+	}
+	h->size = n_count;
+	*(*h).node = *n;
+
+	for(int i = h->size/2 -1 ; i >= 0; i --)
+		sift_heap_down_L(h,i);
+}
+void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq)
+{
+	memset(len_to_code,0,sizeof(len_to_code));
+	memset(dist_to_code_low,0,sizeof(dist_to_code_low));
+	memset(dist_to_code_rest,0,sizeof(dist_to_code_rest));
+
+
+	gen_len_to_code_table(len_to_code);
+	gen_dist_to_code_tables(dist_to_code_low,dist_to_code_rest);
+
+	for(uint64_t k = 0; k < tokens;k++){
+		if(pairs[k].length == 0){
+			lit_freq[pairs[k].literal]++;
+		}else{
+			lit_freq[len_code(pairs[k].length)]++;
+			dist_freq[dist_code(pairs[k].distance)]++;
+		}
+	}
+	lit_freq[256]++;
+}
+
 void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist)
 {
 	uint64_t best_distance = 0, best_length = 0;
