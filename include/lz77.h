@@ -9,6 +9,9 @@
 #define HASH_BIT 15
 #define HASH_SIZE (1 << HASH_BIT)
 
+#define MAX_LIT_TREE ((286 * 2) -1)
+#define MAX_DIST_TREE ((30*2) -2)
+
 struct LZstate{
 	int16_t head[HASH_SIZE];
 	int16_t prev[WINDOW_SIZE];
@@ -21,9 +24,29 @@ struct LDpair {
 	uint8_t literal;
 };
 
+struct Hnode{
+	uint32_t freq;
+	uint16_t left,rigth;
+	uint16_t symbol;
+};
+
+struct Heap_literal{
+	uint16_t idx[MAX_LIT_TREE];
+	int16_t size;
+	struct Hnode *nodes
+};
+
+struct Heap_distance{
+	uint16_t idx[MAX_DIST_TREE];
+	int16_t size;
+	struct Hnode *nodes
+};
+
 int debug_tb();
+void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 void LZstate_init(struct LZstate *state);
 void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 int LZ77_binary(uint8_t *input,struct LDpair **pairs);
 void decode_LZ77(struct LDpair *pairs, uint64_t actual_pair, uint8_t *decoded_data);
+void smallest_lit_freq(struct LDpair *pairs,uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq,uint64_t *smallest,uint64_t *second_smallest);
 #endif
