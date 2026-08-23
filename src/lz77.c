@@ -22,6 +22,7 @@ static void gen_len_to_code_table(uint16_t *table);
 static uint8_t dist_code(uint32_t d);
 static uint16_t len_code(uint16_t l);
 static int is_node_empty(struct Hnode *n);
+static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 
 /*---- Heap tree functions -----*/
 
@@ -43,6 +44,7 @@ static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *
 static int16_t dist_tree(uint32_t *dist_freq,struct Hnode *n, struct Heap_distance *h);
 static void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len);
 static void gen_codes(uint8_t *code_len, int16_t n, uint16_t *codes);
+static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes);
 
 /*-----------------------------------*/
 
@@ -320,7 +322,7 @@ static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *
 	return heap_pop_L(h);/*root*/
 }
 
-void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes)
+static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes)
 {
 	struct Hnode n[MAX_LIT_TREE] = {0};
 	struct Heap_literal h = {0};
@@ -363,7 +365,7 @@ void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_code
 		}
 	}
 }
-void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq)
+static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq)
 {
 	memset(len_to_code,0,sizeof(len_to_code));
 	memset(dist_to_code_low,0,sizeof(dist_to_code_low));
@@ -478,3 +480,23 @@ void decode_LZ77(struct LDpair *pairs, uint64_t actual_pair, uint8_t *decoded_da
 	}
 }
 
+int deflate(uint8_t *input, uint64_t input_size){
+	size_t pair_size = input_size / sizeof(struct LDpair);
+	pair_size *= sizeof(struct LDpair);
+
+	uint64_t *pairs = (uint64_t*)malloc(sizeof(uint64_t) + (sizeof(struct LDpair) *pair_size));
+	if(!pairs) return -1;
+	memset(pairs,0,sizeof(uint64_t) + ((sizeof(struct LDpair) * pair_size)));
+	*pairs = pair_size;
+	struct LDpair *p = (struct LDpair *)( pairs + 1);
+	int tokens = LZ77_binary(input,&p);
+
+	uint32_t lit_freq[286] = {0};
+	uint32_t dist_freq[30] = {0};
+
+	count_frequency(p, tokens,lit_freq,dist_freq);
+	free(pairs);
+	uint16_t lit_codes[286] = {0};
+	uint16_t dist_codes[30] = {0};
+	gen_huffman_codes(lit_freq,dist_freq,lit_codes,dist_codes);
+}

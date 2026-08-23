@@ -43,8 +43,7 @@ struct Heap_distance{
 };
 
 int debug_tb();
-void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes);
-void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
+int deflate(uint8_t *input, uint64_t input_size);
 void LZstate_init(struct LZstate *state);
 void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 int LZ77_binary(uint8_t *input,struct LDpair **pairs);

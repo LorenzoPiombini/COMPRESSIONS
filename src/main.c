@@ -18,36 +18,10 @@ int main(){
 	uint8_t *data = i_bin + 8;
 	memcpy(data,i,input_size);
 
-	size_t pair_size = input_size / sizeof(struct LDpair);
-	pair_size *= sizeof(struct LDpair);
 
-	uint64_t *pairs = (uint64_t*)malloc(sizeof(uint64_t) + (sizeof(struct LDpair) *pair_size));
-	memset(pairs,0,sizeof(uint64_t) + ((sizeof(struct LDpair) * pair_size)));
-	*pairs = pair_size;
-	struct LDpair *p = (struct LDpair *)( pairs + 1);
-	int tokens = LZ77_binary(data,&p);
+	deflate(data,input_size);
 
-
-	fprintf(stdout,"input was %d bytes long, created %d tokens:\n\n",(int)strlen(i),tokens);
-	for(int i = 0; i < tokens;i++){
-		fprintf(stdout,"{d = %d, l = %d, literal = '%u'}\n",p[i].distance,p[i].length,p[i].literal);
-	}
-
-
-	uint8_t decoded[input_size];
-	memset(decoded,0,input_size);
-	decode_LZ77(p,tokens,decoded);
-	uint32_t lit_freq[286] = {0};
-	uint32_t dist_freq[30] = {0};
-
-	count_frequency(p, tokens,lit_freq,dist_freq);
-	free(pairs);
 	free(i_bin);
-
-	uint16_t lit_codes[286] = {0};
-	uint16_t dist_codes[30] = {0};
-	gen_huffman_codes(lit_freq,dist_freq,lit_codes,dist_codes);
-
 /* TEST FOR THE TREES
  *
 	uint32_t kraft = 0;
@@ -62,8 +36,5 @@ int main(){
 
 	*/
 
-	if(memcmp(i,decoded,input_size) == 0){
-		printf("inpunt and decoded are acutally equal.\ntest passed!\n");
-	}
 	return 0;
 }
