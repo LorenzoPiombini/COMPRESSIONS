@@ -48,6 +48,14 @@ int main(){
 	struct Heap_literal h = {0};
 	int16_t root = lit_tree(lit_freq,n,&h);
 	printf("root is %d\n",root);
+
+	uint8_t code_len[286] = {0};
+	assign_depth(n,root,0,code_len);
+	uint32_t kraft = 0;
+	for(int s = 0; s < 286; s++)
+		if(code_len[s]) kraft += 1u << (15 - code_len[s]);
+	printf("kraft = %u (want %u)\n", kraft, 1u << 15);
+
 	if(memcmp(i,decoded,input_size) == 0){
 		printf("inpunt and decoded are acutally equal.\ntest passed!\n");
 	}

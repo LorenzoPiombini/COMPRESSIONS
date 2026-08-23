@@ -39,6 +39,20 @@ static void heap_push_L(struct Heap_literal *h,int16_t i);
 static void heap_push_D(struct Heap_distance *h,int16_t i);	
 
 
+/*-----------------------------------*/
+
+void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len)
+{
+	if(n[i].left < 0){
+		code_len[n[i].symbol] = depth;
+		return;
+	}
+
+	assign_depth(n,n[i].left,depth + 1,code_len);
+	assign_depth(n,n[i].rigth,depth + 1,code_len);
+}
+
+
 static int16_t heap_pop_L(struct Heap_literal *h)
 {
 	int16_t top = h->idx[0]; 
