@@ -44,17 +44,23 @@ int main(){
 	free(pairs);
 	free(i_bin);
 
-	struct Hnode n[MAX_LIT_TREE] = {0};
-	struct Heap_literal h = {0};
-	int16_t root = lit_tree(lit_freq,n,&h);
-	printf("root is %d\n",root);
+	uint16_t lit_codes[286] = {0};
+	uint16_t dist_codes[30] = {0};
+	gen_huffman_codes(lit_freq,dist_freq,lit_codes,dist_codes);
 
-	uint8_t code_len[286] = {0};
-	assign_depth(n,root,0,code_len);
+/* TEST FOR THE TREES
+ *
 	uint32_t kraft = 0;
 	for(int s = 0; s < 286; s++)
 		if(code_len[s]) kraft += 1u << (15 - code_len[s]);
 	printf("kraft = %u (want %u)\n", kraft, 1u << 15);
+
+	kraft = 0;
+	for(int s = 0; s < 30; s++)
+		if(code_len_dist[s]) kraft += 1u << (15 - code_len_dist[s]);
+	printf("kraft = %u (want %u)\n", kraft, 1u << 15);
+
+	*/
 
 	if(memcmp(i,decoded,input_size) == 0){
 		printf("inpunt and decoded are acutally equal.\ntest passed!\n");

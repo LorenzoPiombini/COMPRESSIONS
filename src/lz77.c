@@ -39,9 +39,14 @@ static void heap_push_L(struct Heap_literal *h,int16_t i);
 static void heap_push_D(struct Heap_distance *h,int16_t i);	
 
 
+static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h);
+static int16_t dist_tree(uint32_t *dist_freq,struct Hnode *n, struct Heap_distance *h);
+static void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len);
+static void gen_codes(uint8_t *code_len, int16_t n, uint16_t *codes);
+
 /*-----------------------------------*/
 
-void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len)
+static void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len)
 {
 	if(n[i].left < 0){
 		code_len[n[i].symbol] = depth;
@@ -52,6 +57,27 @@ void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len)
 	assign_depth(n,n[i].rigth,depth + 1,code_len);
 }
 
+static void gen_codes(uint8_t *code_len, int16_t n, uint16_t *codes)
+{
+	uint16_t bl_count[16] = {0};
+	int i;
+	for(i = 0; i < n; i++){
+		bl_count[code_len[i]]++;
+	}
+
+	bl_count[0] = 0;
+
+	uint16_t next_code[16] = {0}, code = 0;
+	for(int bits = 1; bits <= 15; bits++){
+		code = (code + bl_count[bits-1]) << 1;
+		next_code[bits] = code;
+	}
+
+	for(i = 0; i < n;i++){
+		if(code_len[i]) codes[i] = next_code[code_len[i]]++;
+	}
+
+}
 
 static int16_t heap_pop_L(struct Heap_literal *h)
 {
@@ -229,7 +255,40 @@ int debug_tb(){
 
 
 
-int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
+static int16_t dist_tree(uint32_t *dist_freq,struct Hnode *n, struct Heap_distance *h)
+{
+	int n_count = 0;
+	for(int i = 0; i < 30; i++){
+		if(dist_freq[i] == 0) continue;
+		n[n_count].symbol = i;
+		n[n_count].freq = dist_freq[i];
+		n[n_count].left = -1;
+		n[n_count].rigth = -1;
+		h->idx[n_count] = n_count;
+		n_count++;
+	}
+
+	h->size = n_count;
+	(*h).nodes = n;
+
+	for(int i = h->size/2 -1 ; i >= 0; i --)
+		sift_heap_down_D(h,i);
+
+	while(h->size > 1){
+		int16_t a = heap_pop_D(h);
+		int16_t b = heap_pop_D(h);
+		int16_t p = n_count++;
+		n[p].freq = n[a].freq + n[b].freq;
+		n[p].left = a;
+		n[p].rigth = b;
+		n[p].symbol = 0xffff;
+		heap_push_D(h,p);
+	}
+
+	return heap_pop_D(h);/*root*/
+}
+
+static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
 {
 	int n_count = 0;
 	for(int i = 0; i < 286; i++){
@@ -259,6 +318,50 @@ int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
 	}
 
 	return heap_pop_L(h);/*root*/
+}
+
+void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes)
+{
+	struct Hnode n[MAX_LIT_TREE] = {0};
+	struct Heap_literal h = {0};
+	struct Heap_distance hd = {0};
+	struct Hnode nd[MAX_DIST_TREE] = {0};
+
+	uint8_t code_len[286] = {0};
+	uint8_t code_len_dist[30] = {0};
+
+	int16_t root_l = lit_tree(lit_freq,n,&h);
+	int16_t root_d = dist_tree(dist_freq,nd,&hd);
+
+	assign_depth(n,root_l,0,code_len);
+	assign_depth(nd,root_d,0,code_len_dist);
+
+
+	gen_codes(code_len,286,lit_codes);
+	gen_codes(code_len_dist,30,dist_codes);
+	for(int a = 0; a < 286; a++){
+		if(!code_len[a]) continue;
+		for(int b = 0; b < 286; b++){
+			if(a == b || !code_len[b]) continue;
+			if(code_len[a] <= code_len[b]){
+				int shift = code_len[b] - code_len[a];
+				if((lit_codes[b] >> shift) == lit_codes[a])
+					printf("PREFIX VIOLATION: %d is prefix of %d\n", a, b);
+			}
+		}
+	}
+
+	for(int a = 0; a < 30; a++){
+		if(!code_len_dist[a]) continue;
+		for(int b = 0; b < 30; b++){
+			if(a == b || !code_len_dist[b]) continue;
+			if(code_len_dist[a] <= code_len_dist[b]){
+				int shift = code_len_dist[b] - code_len_dist[a];
+				if((dist_codes[b] >> shift) == dist_codes[a])
+					printf("PREFIX VIOLATION: %d is prefix of %d\n", a, b);
+			}
+		}
+	}
 }
 void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq)
 {

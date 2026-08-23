@@ -43,8 +43,7 @@ struct Heap_distance{
 };
 
 int debug_tb();
-void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len);
-int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h);
+void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes);
 void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 void LZstate_init(struct LZstate *state);
 void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
