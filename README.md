@@ -11,9 +11,9 @@ you just call the **deflate()** function, you pass the input, the input size, an
 
 ```c
         uint8_t *df_in = NULL;
-  1     long long r = 0;
-  2     if((r = deflate(data,input_size,&df_in)) == -1){
+        long long r = 0;
+        if((r = deflate(data,input_size,&df_in)) == -1){
             /* handle error */
-  5         return -1;
-  6     }
+            return -1;
+        }
 ```
