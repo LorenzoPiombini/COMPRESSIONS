@@ -31,9 +31,9 @@ struct Hnode{
 };
 
 struct Heap{
+	struct Hnode *nodes;
 	int32_t *idx; /*a pointer to the index array*/
 	int16_t size;
-	struct Hnode *nodes;
 };
 
 struct Bit_writer{
@@ -46,9 +46,6 @@ struct Bit_writer{
 
 int debug_tb();
 long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
-void LZstate_init(struct LZstate *state);
-void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
-int LZ77_binary(uint8_t *input,struct LDpair **pairs);
+/*TODO decode_LZ77 to inflate*/
 void decode_LZ77(struct LDpair *pairs, uint64_t actual_pair, uint8_t *decoded_data);
-void smallest_lit_freq(struct LDpair *pairs,uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq,uint64_t *smallest,uint64_t *second_smallest);
 #endif

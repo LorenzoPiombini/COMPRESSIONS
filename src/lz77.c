@@ -11,6 +11,8 @@ static const uint16_t length_base[29] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,3
 static const uint8_t length_extra[29] = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0};
 static const uint16_t distance_base[30] = {1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577};
 static const uint8_t distance_extra[30] = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13};
+static const uint8_t cl_order[19] = {16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15};
+static const uint8_t cl_extra_bits[19] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,3,7};
 static uint16_t len_to_code[259];
 static uint16_t dist_to_code_low[257];
 static uint16_t dist_to_code_rest[256];
@@ -40,7 +42,6 @@ static int16_t build_tree(uint32_t *freq,int freq_size,struct Hnode *n,struct He
 /*-----------Huffman Coding---------*/
 static void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len);
 static void gen_codes(uint8_t *code_len, int16_t n, uint16_t *codes);
-static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes,uint8_t *code_len,uint8_t *code_len_dist);
 static int put_bits(struct Bit_writer *w,uint32_t value,int n);
 static int put_code(struct Bit_writer *w,uint64_t code,int len);
 static int flush(struct Bit_writer *w);
@@ -286,53 +287,6 @@ static int16_t build_tree(uint32_t *freq, int freq_size, struct Hnode *n,struct 
 	return heap_pop(h);/*root*/
 }
 
-static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes,uint8_t *code_len,uint8_t *code_len_dist)
-{
-	struct Hnode n[MAX_LIT_TREE] = {0};
-	uint32_t idx_l[MAX_LIT_TREE] = {0};
-	struct Heap h = {idx_l,0,0};
-	struct Hnode nd[MAX_DIST_TREE] = {0};
-	uint32_t idx_h[MAX_LIT_TREE] = {0};
-	struct Heap hd = {idx_h,0,0};
-
-	int16_t root_l = build_tree(lit_freq,286,n,&h);
-	int16_t root_d = build_tree(dist_freq,30,nd,&hd);
-
-	assign_depth(n,root_l,0,code_len);
-	assign_depth(nd,root_d,0,code_len_dist);
-
-
-	gen_codes(code_len,286,lit_codes);
-	gen_codes(code_len_dist,30,dist_codes);
-
-#if 0
-
-	/*NOTE THESE TWO LOOPS ARE A TEST TO VALIDATE THE TREES*/
-	for(int a = 0; a < 286; a++){
-		if(!code_len[a]) continue;
-		for(int b = 0; b < 286; b++){
-			if(a == b || !code_len[b]) continue;
-			if(code_len[a] <= code_len[b]){
-				int shift = code_len[b] - code_len[a];
-				if((lit_codes[b] >> shift) == lit_codes[a])
-					printf("PREFIX VIOLATION: %d is prefix of %d\n", a, b);
-			}
-		}
-	}
-
-	for(int a = 0; a < 30; a++){
-		if(!code_len_dist[a]) continue;
-		for(int b = 0; b < 30; b++){
-			if(a == b || !code_len_dist[b]) continue;
-			if(code_len_dist[a] <= code_len_dist[b]){
-				int shift = code_len_dist[b] - code_len_dist[a];
-				if((dist_codes[b] >> shift) == dist_codes[a])
-					printf("PREFIX VIOLATION: %d is prefix of %d\n", a, b);
-			}
-		}
-	}
-#endif
-}
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq)
 {
 	memset(len_to_code,0,sizeof(len_to_code));
@@ -470,7 +424,22 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 	uint8_t code_len[286] = {0};
 	uint8_t code_len_dist[30] = {0};
 
-	gen_huffman_codes(lit_freq,dist_freq,lit_codes,dist_codes,code_len,code_len_dist);
+	struct Hnode n[MAX_LIT_TREE] = {0};
+	uint32_t idx_l[MAX_LIT_TREE] = {0};
+	struct Heap h = {0,idx_l,0};
+	struct Hnode nd[MAX_DIST_TREE] = {0};
+	uint32_t idx_h[MAX_LIT_TREE] = {0};
+	struct Heap hd = {0,idx_h,0};
+
+	int16_t root_l = build_tree(lit_freq,286,n,&h);
+	int16_t root_d = build_tree(dist_freq,30,nd,&hd);
+
+	assign_depth(n,root_l,0,code_len);
+	assign_depth(nd,root_d,0,code_len_dist);
+
+
+	gen_codes(code_len,286,lit_codes);
+	gen_codes(code_len_dist,30,dist_codes);
 
 	struct Bit_writer w = {0};
 	w.buffer = malloc(1024*4); /*4 kib*/
@@ -489,6 +458,10 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 	int hdist = 30;
 	while(hdist > 1 && code_len_dist[hdist - 1] == 0) hdist--;
 
+	if(put_bits(&w,hlit - 257,5) == -1) goto clean_on_failure;
+	if(put_bits(&w,hdist - 1,5) == -1) goto clean_on_failure;
+
+	/*compute HCLEN */
 	uint8_t all_len[286 + 30] = {0};
 	int n_all = 0;
 	for(int i = 0; i < hlit;  i++) all_len[n_all++] = code_len[i];
@@ -537,8 +510,34 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 		}
 	}
 
-	if(put_bits(&w,hlit - 257,5) == -1) goto clean_on_failure;
-	if(put_bits(&w,hdist - 1,5) == -1) goto clean_on_failure;
+
+	uint32_t cl_freq[19] = {0};
+	for(int k = 0; k < n_cl; k++) cl_freq[cl_sym[k]]++;
+
+	uint16_t cl_codes[19] = {0};
+	uint8_t cl_code_len[19] = {0};
+
+	struct Hnode nodes[19*2-1] = {0};
+	uint32_t inx_cl[19*2-1] = {0};
+	struct Heap h_cl = {0,inx_cl,0};
+
+	int16_t root_cl = build_tree(cl_freq,19,nodes,&h_cl);
+
+	assign_depth(nodes,root_cl,0,cl_code_len);
+	gen_codes(cl_code_len,19,cl_codes);
+
+	int hclen = 19;
+	while(hclen > 4 && cl_code_len[cl_order[hclen-1]] == 0) hclen--;
+	
+	if(put_bits(&w,hclen-4,4) == -1) goto clean_on_failure;
+	for(int k = 0; k < hclen; k++)
+		if(put_bits(&w,cl_code_len[cl_order[k]],3) == -1) goto clean_on_failure;
+		
+	for(int k = 0; k < n_cl; k++){
+		if(put_code(&w, cl_codes[cl_sym[k]], cl_code_len[cl_sym[k]]) == -1) goto clean_on_failure;
+		if(cl_extra_bits[cl_sym[k]])
+			if(put_bits(&w, cl_extra[k], cl_extra_bits[cl_sym[k]]) == -1) goto clean_on_failure;
+	}
 
 	for(uint64_t i = 0; i < tokens; i++){
 		if(p[i].length == 0){
