@@ -17,3 +17,4 @@ you just call the **deflate()** function, you pass the input, the input size, an
             return -1;
         }
 ```
+the caller of this function has to free the result **df_in**.
