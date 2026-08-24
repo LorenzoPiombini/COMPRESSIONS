@@ -42,11 +42,64 @@ static void heap_push_D(struct Heap_distance *h,int16_t i);
 
 static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h);
 static int16_t dist_tree(uint32_t *dist_freq,struct Hnode *n, struct Heap_distance *h);
+/*-----------------------------------*/
+
+/*-----------Huffman Coding---------*/
 static void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len);
 static void gen_codes(uint8_t *code_len, int16_t n, uint16_t *codes);
-static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes);
+static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes,uint8_t *code_len,uint8_t *code_len_dist);
+static int put_bits(struct Bit_writer *w,uint32_t value,int n);
+static int put_code(struct Bit_writer *w,uint64_t code,int len);
+static int flush(struct Bit_writer *w);
+
 
 /*-----------------------------------*/
+
+static int flush(struct Bit_writer *w)
+{
+	while(w->nbits > 0){
+		if(w->bwritten == w->capacity){
+			uint8_t *np = realloc(w->buffer,(w->capacity*2) * sizeof *np);
+			if(!np) return -1;
+			w->buffer = np;
+			w->capacity *= 2; 
+		}
+		w->buffer[w->bwritten++] = w->accumulator & 0xFF;
+		w->accumulator >>= 8;
+		w->nbits -= 8;
+	}
+
+	return 0;
+}
+
+static int put_bits(struct Bit_writer *w,uint32_t value,int n)
+{
+	w->accumulator |= (value & ((1u << n) -1)) << w->nbits;
+	w->nbits += n;
+	while(w->nbits >= 8){
+		if(w->bwritten == w->capacity){
+			uint8_t *np = realloc(w->buffer,(w->capacity*2) * sizeof *np);
+			if(!np) return -1;
+			w->buffer = np;
+			w->capacity *= 2; 
+		}
+		w->buffer[w->bwritten++] = w->accumulator & 0xFF;
+		w->accumulator >>= 8;
+		w->nbits -= 8;
+	}
+	return 0;
+}
+
+static int put_code(struct Bit_writer *w,uint64_t code,int len)
+{
+	uint16_t rev = 0;
+	for(int i = 0; i <len ; i++){
+		rev |= ((code >> i) & 1) << (len - 1 - i);
+	}
+	if(put_bits(w,rev,len) == -1) return -1;
+	return 0;
+}
+
 
 static void assign_depth(struct Hnode *n,int16_t i, int8_t depth, uint8_t *code_len)
 {
@@ -322,15 +375,13 @@ static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *
 	return heap_pop_L(h);/*root*/
 }
 
-static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes)
+static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes,uint8_t *code_len,uint8_t *code_len_dist)
 {
 	struct Hnode n[MAX_LIT_TREE] = {0};
 	struct Heap_literal h = {0};
 	struct Heap_distance hd = {0};
 	struct Hnode nd[MAX_DIST_TREE] = {0};
 
-	uint8_t code_len[286] = {0};
-	uint8_t code_len_dist[30] = {0};
 
 	int16_t root_l = lit_tree(lit_freq,n,&h);
 	int16_t root_d = dist_tree(dist_freq,nd,&hd);
@@ -341,6 +392,10 @@ static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *l
 
 	gen_codes(code_len,286,lit_codes);
 	gen_codes(code_len_dist,30,dist_codes);
+
+#if 0
+
+	/*NOTE THESE TWO LOOPS ARE A TEST TO VALIDATE THE TREES*/
 	for(int a = 0; a < 286; a++){
 		if(!code_len[a]) continue;
 		for(int b = 0; b < 286; b++){
@@ -364,6 +419,7 @@ static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *l
 			}
 		}
 	}
+#endif
 }
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq)
 {
@@ -480,7 +536,8 @@ void decode_LZ77(struct LDpair *pairs, uint64_t actual_pair, uint8_t *decoded_da
 	}
 }
 
-int deflate(uint8_t *input, uint64_t input_size){
+long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
+{
 	size_t pair_size = input_size / sizeof(struct LDpair);
 	pair_size *= sizeof(struct LDpair);
 
@@ -489,14 +546,131 @@ int deflate(uint8_t *input, uint64_t input_size){
 	memset(pairs,0,sizeof(uint64_t) + ((sizeof(struct LDpair) * pair_size)));
 	*pairs = pair_size;
 	struct LDpair *p = (struct LDpair *)( pairs + 1);
-	int tokens = LZ77_binary(input,&p);
+	uint64_t tokens = LZ77_binary(input,&p);
 
 	uint32_t lit_freq[286] = {0};
 	uint32_t dist_freq[30] = {0};
 
 	count_frequency(p, tokens,lit_freq,dist_freq);
-	free(pairs);
+
 	uint16_t lit_codes[286] = {0};
 	uint16_t dist_codes[30] = {0};
-	gen_huffman_codes(lit_freq,dist_freq,lit_codes,dist_codes);
+	uint8_t code_len[286] = {0};
+	uint8_t code_len_dist[30] = {0};
+
+	gen_huffman_codes(lit_freq,dist_freq,lit_codes,dist_codes,code_len,code_len_dist);
+
+	struct Bit_writer w = {0};
+	w.buffer = malloc(1024*4); /*4 kib*/
+	if(!w.buffer) goto clean_on_failure;
+
+	memset(w.buffer,0,1024*4);
+	w.capacity = 1024*4;
+
+	if(put_bits(&w,1,1) == -1) goto clean_on_failure;
+	if(put_bits(&w,2,2) == -1) goto clean_on_failure;
+
+	/*HEADER*/
+	int hlit = 286;
+	while(hlit > 257 && code_len[hlit - 1] == 0) hlit--;
+
+	int hdist = 30;
+	while(hdist > 1 && code_len_dist[hdist - 1] == 0) hdist--;
+
+	uint8_t all_len[286 + 30] = {0};
+	int n_all = 0;
+	for(int i = 0; i < hlit;  i++) all_len[n_all++] = code_len[i];
+	for(int i = 0; i < hdist; i++) all_len[n_all++] = code_len_dist[i];
+
+	uint8_t cl_sym[316] = {0}; 
+	uint16_t cl_extra[316] = {0}; 
+
+	int i = 0, n_cl = 0;
+	while(i < n_all){
+		uint8_t v = all_len[i];
+		int run = 1;
+		while(run + i < n_all && (all_len[i+run] == v)) run++;
+
+		if(v == 0){
+			while(run >= 3){
+				int r = run > 138 ? 138 : run;
+				if(r >= 11){
+					cl_sym[n_cl] = 18;
+					cl_extra[n_cl++] = r - 11;
+				} else {
+					cl_sym[n_cl] = 17;
+					cl_extra[n_cl++] = r - 3;
+				}
+				run -= r;
+				i += r;
+			}
+			while(run--){n_cl++;i++;}
+		}else{
+			cl_sym[n_cl] = v;
+			n_cl++;
+			i++;
+			run--;
+			while(run >= 3){
+				int r = run > 6 ? 6 : run;
+				cl_sym[n_cl] = 16;
+				cl_extra[n_cl++] = r -3;
+				run -= r;
+				i += r;
+			}
+			while(run--){
+				cl_sym[n_cl] = v;
+				n_cl++;
+				i++;
+			}
+		}
+	}
+
+	if(put_bits(&w,hlit - 257,5) == -1) goto clean_on_failure;
+	if(put_bits(&w,hdist - 1,5) == -1) goto clean_on_failure;
+
+	for(uint64_t i = 0; i < tokens; i++){
+		if(p[i].length == 0){
+			uint8_t lit = p[i].literal;
+			if(put_code(&w,lit_codes[lit],code_len[lit]) == -1) goto clean_on_failure;
+		}else{
+			uint16_t lc = len_code(p[i].length);
+			int	li =  lc - 257;
+			if(put_code(&w,lit_codes[lc],code_len[lc]) == -1) goto clean_on_failure;
+			if(length_extra[li])
+				if(put_bits(&w,p[i].length - length_base[li],length_extra[li]) == -1) goto clean_on_failure;
+
+			uint8_t dc = dist_code(p[i].distance);
+			if(put_code(&w,dist_codes[dc],code_len_dist[dc]) == -1) goto clean_on_failure;
+
+			if(distance_extra[dc])
+				if(put_bits(&w,p[i].distance - distance_base[dc],distance_extra[dc]) == -1) goto clean_on_failure;
+		}
+	}
+
+	if(put_code(&w,lit_codes[256],code_len[256]) == -1) goto clean_on_failure;
+	flush(&w);
+
+#if 0
+	/*NOTE: THIS IS A TEST for the bit writer*/
+	uint64_t bits = 0;
+	for(int s = 0; s < 286; s++) bits += (uint64_t)lit_freq[s] * code_len[s];
+	for(int s = 0; s < 30;  s++) bits += (uint64_t)dist_freq[s] * code_len_dist[s];
+	/* plus extra bits */
+	for(uint64_t k = 0; k < tokens; k++){
+		if(p[k].length){
+			bits += length_extra[len_code(p[k].length) - 257];
+			bits += distance_extra[dist_code(p[k].distance)];
+		}
+	}
+	printf("predicted %lu bytes\n", (bits + 3 + 7) / 8);
+#endif
+
+	free(pairs);
+	*deflate_input = w.buffer;
+	return (long long) w.bwritten;
+
+clean_on_failure:
+	if(w.buffer) free(w.buffer);
+	free(pairs);
+	return -1;
 }

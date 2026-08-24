@@ -36,14 +36,24 @@ struct Heap_literal{
 	struct Hnode *nodes;
 };
 
+
 struct Heap_distance{
 	uint16_t idx[MAX_DIST_TREE];
 	int16_t size;
 	struct Hnode *nodes;
 };
 
+
+struct Bit_writer{
+	uint64_t bwritten; 
+	uint64_t capacity;
+	uint32_t accumulator;
+	int nbits; /*how many bits are meaningful in accumulator*/
+	uint8_t *buffer;
+};
+
 int debug_tb();
-int deflate(uint8_t *input, uint64_t input_size);
+long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
 void LZstate_init(struct LZstate *state);
 void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 int LZ77_binary(uint8_t *input,struct LDpair **pairs);

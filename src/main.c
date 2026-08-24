@@ -19,9 +19,16 @@ int main(){
 	memcpy(data,i,input_size);
 
 
-	deflate(data,input_size);
+	uint8_t *df_in = NULL;
+	long long r = 0;
+	if((r = deflate(data,input_size,&df_in)) == -1){
+		free(i_bin);
+		if(df_in) free(df_in);
+		return -1;
+	}
 
 	free(i_bin);
+	free(df_in);
 /* TEST FOR THE TREES
  *
 	uint32_t kraft = 0;
