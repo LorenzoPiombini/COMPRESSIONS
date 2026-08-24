@@ -30,19 +30,11 @@ struct Hnode{
 	uint16_t symbol;
 };
 
-struct Heap_literal{
-	int16_t idx[MAX_LIT_TREE];
+struct Heap{
+	int32_t *idx; /*a pointer to the index array*/
 	int16_t size;
 	struct Hnode *nodes;
 };
-
-
-struct Heap_distance{
-	uint16_t idx[MAX_DIST_TREE];
-	int16_t size;
-	struct Hnode *nodes;
-};
-
 
 struct Bit_writer{
 	uint64_t bwritten; 

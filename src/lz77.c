@@ -26,22 +26,15 @@ static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_
 
 /*---- Heap tree functions -----*/
 
-static void heap_swap_L(struct Heap_literal *h,int a, int b);
-static void heap_swap_D(struct Heap_distance *h,int a, int b);
-static uint32_t heap_freq_L(struct Heap_literal *h,int a);
-static uint32_t heap_freq_D(struct Heap_distance *h,int a);
-static void sift_heap_down_L(struct Heap_literal *h,int i);
-static void sift_heap_down_D(struct Heap_distance *h,int i);
-static void sift_heap_up_L(struct Heap_literal *h,int i);
-static void sift_heap_up_D(struct Heap_distance *h,int i);
-static int16_t heap_pop_L(struct Heap_literal *h);
-static int16_t heap_pop_D(struct Heap_distance *h);	
-static void heap_push_L(struct Heap_literal *h,int16_t i);
-static void heap_push_D(struct Heap_distance *h,int16_t i);	
+static void heap_swap(struct Heap *h,int a, int b);
+static uint32_t heap_freq(struct Heap *h,int a);
+static void sift_heap_down(struct Heap *h,int i);
+static void sift_heap_up(struct Heap *h,int i);
+static uint32_t heap_pop(struct Heap *h);
+static void heap_push(struct Heap *h,int16_t i);
 
 
-static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h);
-static int16_t dist_tree(uint32_t *dist_freq,struct Hnode *n, struct Heap_distance *h);
+static int16_t build_tree(uint32_t *freq,int freq_size,struct Hnode *n,struct Heap *h);
 /*-----------------------------------*/
 
 /*-----------Huffman Coding---------*/
@@ -134,107 +127,58 @@ static void gen_codes(uint8_t *code_len, int16_t n, uint16_t *codes)
 
 }
 
-static int16_t heap_pop_L(struct Heap_literal *h)
+
+static uint32_t heap_pop(struct Heap *h)
 {
-	int16_t top = h->idx[0]; 
+	uint32_t top = h->idx[0]; 
 	h->idx[0] = h->idx[--h->size];
-	if(h->size) sift_heap_down_L(h,0);
+	if(h->size) sift_heap_down(h,0);
 	return top;
 }
 
-static int16_t heap_pop_D(struct Heap_distance *h)
-{
-	int16_t top = h->idx[0]; 
-	h->idx[0] = h->idx[--h->size];
-	if(h->size) sift_heap_down_D(h,0);
-	return top;
 
-}
-
-static void heap_push_L(struct Heap_literal *h,int16_t i)
+static void heap_push(struct Heap *h,int16_t i)
 {
 	h->idx[h->size++] = i; 
-	sift_heap_up_L(h,h->size -1);
-}
-static void heap_push_D(struct Heap_distance *h,int16_t i)
-{
-	h->idx[h->size++] = i; 
-	sift_heap_up_D(h,h->size -1);
+	sift_heap_up(h,h->size -1);
 }
 
-
-
-static void sift_heap_up_L(struct Heap_literal *h,int i)
+static void sift_heap_up(struct Heap *h,int i)
 {
 	while(i > 0){
 		int p = (i -1) / 2;
-		if(heap_freq_L(h,p) <= heap_freq_L(h,i)) return;
-		heap_swap_L(h, i, p);
+		if(heap_freq(h,p) <= heap_freq(h,i)) return;
+		heap_swap(h, i, p);
 		i = p;
 	}
 }
 
-static void sift_heap_up_D(struct Heap_distance *h,int i)
-{
-	while(i > 0){
-		int p = (i -1) / 2;
-		if(heap_freq_D(h,p) <= heap_freq_D(h,i)) return;
-		heap_swap_D(h, i, p);
-		i = p;
-	}
-}
-
-static void sift_heap_down_D(struct Heap_distance *h,int i)
+static void sift_heap_down(struct Heap *h,int i)
 {
 	for(;;){
 		int l = i*2+1;
 		int r = i*2+2;
 		int small = i;
-		if(l < h->size && heap_freq_D(h,l) < heap_freq_D(h,small)) small = l;
-		if(r < h->size && heap_freq_D(h,r) < heap_freq_D(h,small)) small = r;
+		if(l < h->size && heap_freq(h,l) < heap_freq(h,small)) small = l;
+		if(r < h->size && heap_freq(h,r) < heap_freq(h,small)) small = r;
 		if(small == i) return;
-		heap_swap_D(h,i,small);
+		heap_swap(h,i,small);
 		i = small;
 	}
 }
 
-static void sift_heap_down_L(struct Heap_literal *h,int i)
-{
-	for(;;){
-		int l = i*2+1;
-		int r = i*2+2;
-		int small = i;
-		if(l < h->size && heap_freq_L(h,l) < heap_freq_L(h,small)) small = l;
-		if(r < h->size && heap_freq_L(h,r) < heap_freq_L(h,small)) small = r;
-		if(small == i) return;
-		heap_swap_L(h,i,small);
-		i = small;
-	}
-}
-
-static void heap_swap_L(struct Heap_literal *h,int a, int b)
+static void heap_swap(struct Heap *h,int a, int b)
 {
 	int16_t t = h->idx[a];
 	h->idx[a] = h->idx[b];
 	h->idx[b] = t;
 }
 
-static void heap_swap_D(struct Heap_distance *h,int a, int b)
-{
-	int16_t t = h->idx[a];
-	h->idx[a] = h->idx[b];
-	h->idx[b] = t;
-}
-
-static uint32_t heap_freq_D(struct Heap_distance *h,int a)
+static uint32_t heap_freq(struct Heap *h,int a)
 {
 	return h->nodes[h->idx[a]].freq;
 }
 
-static uint32_t heap_freq_L(struct Heap_literal *h,int a)
-{
-	return h->nodes[h->idx[a]].freq;
-}
 
 static uint32_t hash3(uint8_t *p)
 {
@@ -310,46 +254,13 @@ int debug_tb(){
 
 
 
-static int16_t dist_tree(uint32_t *dist_freq,struct Hnode *n, struct Heap_distance *h)
+static int16_t build_tree(uint32_t *freq, int freq_size, struct Hnode *n,struct Heap *h)
 {
 	int n_count = 0;
-	for(int i = 0; i < 30; i++){
-		if(dist_freq[i] == 0) continue;
+	for(int i = 0; i < freq_size; i++){
+		if(freq[i] == 0) continue;
 		n[n_count].symbol = i;
-		n[n_count].freq = dist_freq[i];
-		n[n_count].left = -1;
-		n[n_count].rigth = -1;
-		h->idx[n_count] = n_count;
-		n_count++;
-	}
-
-	h->size = n_count;
-	(*h).nodes = n;
-
-	for(int i = h->size/2 -1 ; i >= 0; i --)
-		sift_heap_down_D(h,i);
-
-	while(h->size > 1){
-		int16_t a = heap_pop_D(h);
-		int16_t b = heap_pop_D(h);
-		int16_t p = n_count++;
-		n[p].freq = n[a].freq + n[b].freq;
-		n[p].left = a;
-		n[p].rigth = b;
-		n[p].symbol = 0xffff;
-		heap_push_D(h,p);
-	}
-
-	return heap_pop_D(h);/*root*/
-}
-
-static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *h)
-{
-	int n_count = 0;
-	for(int i = 0; i < 286; i++){
-		if(lit_freq[i] == 0) continue;
-		n[n_count].symbol = i;
-		n[n_count].freq = lit_freq[i];
+		n[n_count].freq = freq[i];
 		n[n_count].left = -1;
 		n[n_count].rigth = -1;
 		h->idx[n_count] = n_count;
@@ -359,32 +270,33 @@ static int16_t lit_tree(uint32_t *lit_freq,struct Hnode *n,struct Heap_literal *
 	(*h).nodes = n;
 
 	for(int i = h->size/2 -1 ; i >= 0; i --)
-		sift_heap_down_L(h,i);
+		sift_heap_down(h,i);
 
 	while(h->size > 1){
-		int16_t a = heap_pop_L(h);
-		int16_t b = heap_pop_L(h);
+		int16_t a = heap_pop(h);
+		int16_t b = heap_pop(h);
 		int16_t p = n_count++;
 		n[p].freq = n[a].freq + n[b].freq;
 		n[p].left = a;
 		n[p].rigth = b;
 		n[p].symbol = 0xffff;
-		heap_push_L(h,p);
+		heap_push(h,p);
 	}
 
-	return heap_pop_L(h);/*root*/
+	return heap_pop(h);/*root*/
 }
 
 static void gen_huffman_codes(uint32_t *lit_freq,uint32_t *dist_freq,uint16_t *lit_codes,uint16_t *dist_codes,uint8_t *code_len,uint8_t *code_len_dist)
 {
 	struct Hnode n[MAX_LIT_TREE] = {0};
-	struct Heap_literal h = {0};
-	struct Heap_distance hd = {0};
+	uint32_t idx_l[MAX_LIT_TREE] = {0};
+	struct Heap h = {idx_l,0,0};
 	struct Hnode nd[MAX_DIST_TREE] = {0};
+	uint32_t idx_h[MAX_LIT_TREE] = {0};
+	struct Heap hd = {idx_h,0,0};
 
-
-	int16_t root_l = lit_tree(lit_freq,n,&h);
-	int16_t root_d = dist_tree(dist_freq,nd,&hd);
+	int16_t root_l = build_tree(lit_freq,286,n,&h);
+	int16_t root_d = build_tree(dist_freq,30,nd,&hd);
 
 	assign_depth(n,root_l,0,code_len);
 	assign_depth(nd,root_d,0,code_len_dist);
