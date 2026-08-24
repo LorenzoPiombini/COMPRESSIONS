@@ -1,8 +1,8 @@
-## LZ77 compression study
+# compression study
 
-I will need a deflate compraession algorithm for my web server.
-so this is an implementation of the first part of the defalte routine.
+this is a Deflate algorithm using LZ77 and Huffman codes to compress the input. 
+the memory allocations are ketp at minimal, to make sure this routine runs fast enough.
+the deflate part is complete, as per 08-24-26.
 
-I will also need this to open Microsoft office files like word and excel, 
-from my applications.
+
 
