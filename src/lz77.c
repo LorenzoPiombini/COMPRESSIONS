@@ -24,6 +24,8 @@ static void gen_len_to_code_table(uint16_t *table);
 static uint8_t dist_code(uint32_t d);
 static uint16_t len_code(uint16_t l);
 static int is_node_empty(struct Hnode *n);
+static int LZ77_binary(uint8_t *input,struct LDpair **pairs);
+static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 
 /*---- Heap tree functions -----*/
@@ -308,7 +310,7 @@ static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_
 	lit_freq[256]++;
 }
 
-void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist)
+static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist)
 {
 	uint64_t best_distance = 0, best_length = 0;
 	uint8_t *cur = base + bread;
@@ -344,7 +346,7 @@ void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, 
 	*out_dist = (uint16_t)best_distance;
 }
 
-int LZ77_binary(uint8_t *input,struct LDpair **pairs)
+static int LZ77_binary(uint8_t *input,struct LDpair **pairs)
 {
 	uint64_t *pairs_size = ((uint64_t*)(*pairs) - 1);
 	uint64_t input_size = *((uint64_t*)input - 1);
