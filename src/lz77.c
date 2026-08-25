@@ -27,6 +27,8 @@ static int is_node_empty(struct Hnode *n);
 static int LZ77_binary(uint8_t *input,struct LDpair **pairs);
 static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
+static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
+static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
 
 /*---- Heap tree functions -----*/
 
@@ -53,7 +55,7 @@ static int flush(struct Bit_writer *w);
 /*-------------- Read GZIP---------------------*/
 
 /*this just return the offset where the deflate stream starts*/
-static long read_Gzip(uint8_t *content, uint64_t file_size, uint64_t *csize, uint64_t *usize)
+static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize)
 {
 	if(file_size < 18) return -1;
 	if(content[0] != 0x1f || content[1] != 0x8b || content[2] != 8) return -1;
@@ -76,12 +78,29 @@ static long read_Gzip(uint8_t *content, uint64_t file_size, uint64_t *csize, uin
 		if(off + 2 < file_size) off +=2;
 	}
 	
-	/*read ISIZE and CRC-32  from the end
+	/* read ISIZE and CRC-32  from the end
 	 * ISIZE is reversed little endian*/
-	*usize = content[file_size - 4] | ((content[file_size -3] << 8))| (content[file_size -2] << 16) | ((uint32_t)content[file_size - 1] << 24);
+	*isize = content[file_size - 4] | ((content[file_size -3] << 8))| (content[file_size -2] << 16) | ((uint32_t)content[file_size - 1] << 24);
+	*crc32 = content[file_size - 8];
 	return (long) off;
 }
 
+static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
+{
+	/*0x0000FFFF is 2^16 - 1 (65,535) max comment size after EOCD in a .ZIP file*/
+	uint32_t zip_EOCD_max_size = 0x0000FFFF + 22;
+	uint64_t file_start = (file_size > zip_EOCD_max_size) ? file_size - zip_comment_max_size : 0;
+
+	for(uint64_t i = file_size - 22; (i + 1) > file_size; i--){
+		if(file_content[i] == 0x50 
+				&& file_content[i+1] == 0x4B 
+				&& file_content[i+2] == 0x05 
+				&& file_content[i+3] == 0x06) 
+			return (long)i;
+		if(i == 0) return -1;
+	}
+	return -1;
+}
 
 static int flush(struct Bit_writer *w)
 {
