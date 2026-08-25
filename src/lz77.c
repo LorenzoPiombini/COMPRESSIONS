@@ -95,7 +95,7 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 	uint32_t zip_EOCD_max_size = 0x0000FFFF + 22;
 	uint64_t file_start = (file_size > zip_EOCD_max_size) ? file_size - zip_EOCD_max_size : 0;
 
-	for(uint64_t i = file_size - 22; (i + 1) > file_size; i--){
+	for(uint64_t i = file_size - 22; (i + 1) > file_start; i--){
 		if(file_content[i] == 0x50 
 				&& file_content[i+1] == 0x4B 
 				&& file_content[i+2] == 0x05 
@@ -106,7 +106,7 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 	return -1;
 }
 
-static long cd_ZIP(uint8_t *file_content,uint64_t file_size)
+long cd_ZIP(uint8_t *file_content,uint64_t file_size)
 {
 
 	uint32_t central_directory_offset = 0;
@@ -136,7 +136,7 @@ static long cd_ZIP(uint8_t *file_content,uint64_t file_size)
 		uint16_t comment_l = rd16(cd_p + 32);
 		uint32_t file_pos = rd32(cd_p + 42);
 
-		char file_name[file_name_l];
+		char file_name[file_name_l+1];
 		file_name[file_name_l] = '\0';
 		/*bound check*/
 		if(((uint64_t)(cd_p - file_content) + 46) >= file_size) return -1; 

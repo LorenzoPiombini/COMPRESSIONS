@@ -55,4 +55,5 @@ struct Bit_reader{
 long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
 /*TODO decode_LZ77 to inflate*/
 void decode_LZ77(struct LDpair *pairs, uint64_t actual_pair, uint8_t *decoded_data);
+long cd_ZIP(uint8_t *file_content,uint64_t file_size);
 #endif

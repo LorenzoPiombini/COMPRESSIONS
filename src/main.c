@@ -25,8 +25,36 @@ static uint32_t crc32(const uint8_t *buf, uint64_t len)
     return c ^ 0xFFFFFFFFu;
 }
 
+static int test_ZIP_read(char *argv){
+	uint8_t *file_content = NULL; 
+	FILE *fp = fopen(argv,"rb");
+	if(!fp)return -1;
 
-int main(){
+	if(fseek(fp,0,SEEK_END) == -1) goto failed;
+
+	long long size = 0;
+	if((size = ftell(fp)) == -1) goto failed;
+
+	rewind(fp);
+
+	file_content = malloc(size);
+	if(!file_content) goto failed;
+	if(fread(file_content,(size_t)size,1,fp) != 1) goto failed;
+
+	fclose(fp);
+	fp = NULL;
+	if(cd_ZIP(file_content,size) == -1) goto failed;
+
+	free(file_content);
+	return 0;
+
+failed:
+	if(fp) fclose(fp);
+	if(file_content) free(file_content);
+	return -1;
+}
+
+int main(int argc, char **argv){
 	char i[] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam a quam vehicula, tempor nisi ornare, fringilla lorem. Praesent faucibus sapien blandit ante dictum fermentum. Maecenas a accumsan tellus. Quisque eu nunc ante. Proin magna neque, pulvinar eu magna in, tristique auctor augue. Morbi quis lorem consectetur libero dapibus commodo. Maecenas facilisis sagittis mattis. Aenean consectetur dui tempus ante aliquet, vel condimentum leo pellentesque.\n Duis sed nibh eu magna porta scelerisque. Donec quis diam porta, tempor sapien non, convallis neque. Cras risus nunc, dapibus eget fermentum vitae, ultrices eu felis. Nunc non sapien egestas, laoreet velit volutpat, ultrices turpis. Praesent euismod convallis lacinia. Sed sit amet felis tempor lacus imperdiet pellentesque. Morbi fringilla aliquet pharetra.Pellentesque quis lectus sed purus euismod aliquet. Nullam interdum quis lacus sit amet sodales. Pellentesque sit amet lobortis mauris. Quisque ac semper dui. Phasellus ultrices sem at dolor tristique dictum. Proin scelerisque finibus quam, ultrices tempus felis dignissim in. Curabitur id luctus libero, in congue orci. Nam nec est sed nisi lobortis mollis. Praesent in ante tortor. Pellentesque efficitur, mauris in commodo gravida, enim sem posuere dui, at viverra orci lacus ac augue.Sed vel iaculis nibh. Sed facilisis vel dolor eu maximus. Praesent congue ipsum sit amet tempus fermentum. Nam imperdiet velit nec ligula vulputate, sit amet ultrices mi elementum. Etiam vitae nisi nec purus auctor malesuada vel eu lectus. Nam ultrices augue non arcu luctus posuere. Proin eu elit ex. Praesent scelerisque varius quam, quis tempus diam pretium eget. Aliquam commodo mi nec ipsum molestie malesuada. Cras vulputate eu lectus ut venenatis. Quisque egestas eget orci sit amet dictum. Vivamus maximus nulla ut elit interdum luctus non a quam. Sed vitae commodo nulla, vitae vulputate mauris.Vestibulum condimentum ullamcorper ipsum ac eleifend. Sed vel suscipit mi. Proin facilisis ultricies magna, in faucibus neque interdum eu. Nullam orci nisl, iaculis at mattis quis, mollis sed felis. Aliquam vel pellentesque purus, eget dignissim leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc fringilla, arcu eu condimentum vehicula, dui felis eleifend sapien, non porta elit metus vel urna.\nNulla vehicula justo ut purus ornare pretium et vitae ante. Fusce consectetur ac tellus eu placerat. Suspendisse semper auctor dui et cursus. In a massa ut enim mollis varius nec ut mi. Vestibulum sit amet erat nibh. Nulla facilisi. Etiam porta sodales mauris, a placerat leo. Nam eros ex, accumsan at erat vel, euismod maximus augue. Maecenas egestas ligula augue, eu rutrum nisi aliquet nec. Donec mollis volutpat vestibulum. Donec convallis urna mattis tortor aliquam convallis. Etiam luctus libero in pretium varius.";
 
 	int input_size = strlen(i);
@@ -48,7 +76,6 @@ int main(){
 		return -1;
 	}
 
-
 	/*TEST!! write the compressed data to file*/
 	FILE *f = fopen("out.gz", "wb");
 	uint8_t hdr[10] = {0x1f, 0x8b, 0x08, 0, 0,0,0,0, 0, 0xff};
@@ -63,5 +90,6 @@ int main(){
 	fclose(f);
 	free(i_bin);
 	free(df_in);
+	test_ZIP_read(argv[1]);
 	return 0;
 }
