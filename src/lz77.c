@@ -5,6 +5,9 @@
 #include "lz77.h"
 
 
+#define rd16(n) (((uint16_t)(n)[0]) | ((uint16_t)(n)[1] << 8)) 
+#define rd32(n) (((uint32_t)(n)[0]) | ((uint32_t)(n)[1] << 8) | ((uint32_t)(n)[2] << 16) | ((uint32_t)(n)[3] << 24)) 
+
 /* --------- Compressed block tables as per RFC-1951  -----*/
 
 static const uint16_t length_base[29] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258};
@@ -80,7 +83,8 @@ static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uin
 	
 	/* read ISIZE and CRC-32  from the end
 	 * ISIZE is reversed little endian*/
-	*isize = content[file_size - 4] | ((content[file_size -3] << 8))| (content[file_size -2] << 16) | ((uint32_t)content[file_size - 1] << 24);
+	uint8_t *p = &content[file_size - 4];
+	*isize = *p | ((*(p + 1) << 8))| (*(p + 2 ) << 16) | ((uint32_t)*(p + 3)<< 24);
 	*crc32 = content[file_size - 8];
 	return (long) off;
 }
@@ -89,7 +93,7 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 {
 	/*0x0000FFFF is 2^16 - 1 (65,535) max comment size after EOCD in a .ZIP file*/
 	uint32_t zip_EOCD_max_size = 0x0000FFFF + 22;
-	uint64_t file_start = (file_size > zip_EOCD_max_size) ? file_size - zip_comment_max_size : 0;
+	uint64_t file_start = (file_size > zip_EOCD_max_size) ? file_size - zip_EOCD_max_size : 0;
 
 	for(uint64_t i = file_size - 22; (i + 1) > file_size; i--){
 		if(file_content[i] == 0x50 
@@ -97,9 +101,56 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 				&& file_content[i+2] == 0x05 
 				&& file_content[i+3] == 0x06) 
 			return (long)i;
-		if(i == 0) return -1;
+		if(i == 0) return -1;/*avoid forever loop*/
 	}
 	return -1;
+}
+
+static long cd_ZIP(uint8_t *file_content,uint64_t file_size)
+{
+
+	uint32_t central_directory_offset = 0;
+	uint16_t total_cd_records = 0;
+	
+	long EOCD_offset = find_EOCD_ZIP(file_content,file_size);
+	if(EOCD_offset == -1) return -1;
+
+	const uint8_t *p = &file_content[EOCD_offset + 10];
+	total_cd_records = *p | ((uint16_t)*(p + 1) << 8);
+	/*advance 6 bytes to get to offset 16 from EOCD_offset*/
+	p += 6; 
+	central_directory_offset = *p | (*(p + 1) << 8) | (*(p + 2) << 16) | ((uint32_t)*(p + 3) << 24);
+	
+	/*bound check*/
+	if(central_directory_offset >= file_size) return -1;
+
+	const uint8_t *cd_p = &file_content[central_directory_offset];
+	for(uint16_t j = 0; j < total_cd_records; j++){
+		/*check magic number*/
+		if(*cd_p != 0x50 || *(cd_p + 1) != 0x4B || *(cd_p + 2)  != 0x01 || *(cd_p + 3 ) != 0x02) return -1;
+
+		uint16_t comp_method= rd16(cd_p + 10);
+		uint32_t crc32 = rd32(cd_p + 16);
+		uint16_t file_name_l = rd16(cd_p + 28);
+		uint16_t extre_field_l = rd16(cd_p + 30);
+		uint16_t comment_l = rd16(cd_p + 32);
+		uint32_t file_pos = rd32(cd_p + 42);
+
+		char file_name[file_name_l];
+		file_name[file_name_l] = '\0';
+		/*bound check*/
+		if(((uint64_t)(cd_p - file_content) + 46) >= file_size) return -1; 
+
+		uint16_t i;
+		for(i = 0; i < file_name_l;i++) 
+			file_name[i] = *(cd_p + 46 + i);
+
+		printf("%s\n",file_name);
+		/*set the pointer to the next central directory record*/
+		cd_p += (46 + file_name_l + comment_l + extre_field_l);
+	}
+
+	return 0;
 }
 
 static int flush(struct Bit_writer *w)
