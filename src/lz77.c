@@ -48,8 +48,40 @@ static int put_bits(struct Bit_writer *w,uint32_t value,int n);
 static int put_code(struct Bit_writer *w,uint64_t code,int len);
 static int flush(struct Bit_writer *w);
 
-
 /*-----------------------------------*/
+
+/*-------------- Read GZIP---------------------*/
+
+/*this just return the offset where the deflate stream starts*/
+static long read_Gzip(uint8_t *content, uint64_t file_size, uint64_t *csize, uint64_t *usize)
+{
+	if(file_size < 18) return -1;
+	if(content[0] != 0x1f || content[1] != 0x8b || content[2] != 8) return -1;
+
+	uint8_t flag = content[3];
+	uint64_t off = 10;/* the header is 10 byte we set the offset to 10*/
+	
+	/*FEXTRA*/
+	if(flag & 0x04){
+		if((off + 2) > file_size) return -1;
+		uint16_t xlen = content[off] | (content[off+1] << 8);
+		off += 2 + xlen;
+	}
+
+	if(flag & 0x08)/*FNAME*/
+		while(off < file_size && content[off++]);
+	if(flag & 0x10)/*FCOMMENT*/
+		while(off < file_size && content[off++]);
+	if(flag & 0x02){ /*FHCRC*/
+		if(off + 2 < file_size) off +=2;
+	}
+	
+	/*read ISIZE and CRC-32  from the end
+	 * ISIZE is reversed little endian*/
+	*usize = content[file_size - 4] | ((content[file_size -3] << 8))| (content[file_size -2] << 16) | ((uint32_t)content[file_size - 1] << 24);
+	return (long) off;
+}
+
 
 static int flush(struct Bit_writer *w)
 {
@@ -562,21 +594,6 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 
 	if(put_code(&w,lit_codes[256],code_len[256]) == -1) goto clean_on_failure;
 	flush(&w);
-
-#if 0
-	/*NOTE: THIS IS A TEST for the bit writer*/
-	uint64_t bits = 0;
-	for(int s = 0; s < 286; s++) bits += (uint64_t)lit_freq[s] * code_len[s];
-	for(int s = 0; s < 30;  s++) bits += (uint64_t)dist_freq[s] * code_len_dist[s];
-	/* plus extra bits */
-	for(uint64_t k = 0; k < tokens; k++){
-		if(p[k].length){
-			bits += length_extra[len_code(p[k].length) - 257];
-			bits += distance_extra[dist_code(p[k].distance)];
-		}
-	}
-	printf("predicted %lu bytes\n", (bits + 3 + 7) / 8);
-#endif
 
 	free(pairs);
 	*deflate_input = w.buffer;
