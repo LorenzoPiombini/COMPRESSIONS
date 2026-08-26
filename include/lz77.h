@@ -45,13 +45,19 @@ struct Bit_writer{
 };
 
 struct Bit_reader{
-	uint64_t bwritten; 
+	uint64_t bread; 
 	uint64_t capacity;
 	uint32_t accumulator;
 	int nbits; /*how many bits are meaningful in accumulator*/
 	uint8_t *buffer;
-
 };
+
+/*use to read Huffman code from a deflated input*/
+struct Huffman{
+	uint16_t count[16];
+	uint16_t symbol[288];
+};
+
 long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
 /*TODO decode_LZ77 to inflate*/
 void decode_LZ77(struct LDpair *pairs, uint64_t actual_pair, uint8_t *decoded_data);

@@ -90,6 +90,9 @@ int main(int argc, char **argv){
 	fclose(f);
 	free(i_bin);
 	free(df_in);
-	test_ZIP_read(argv[1]);
+
+	if(argv[1])
+		test_ZIP_read(argv[1]);
+	
 	return 0;
 }

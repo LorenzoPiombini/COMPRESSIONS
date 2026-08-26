@@ -30,7 +30,7 @@ static int is_node_empty(struct Hnode *n);
 static int LZ77_binary(uint8_t *input,struct LDpair **pairs);
 static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
-static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
+/*static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);*/
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
 
 /*---- Heap tree functions -----*/
@@ -53,12 +53,20 @@ static int put_bits(struct Bit_writer *w,uint32_t value,int n);
 static int put_code(struct Bit_writer *w,uint64_t code,int len);
 static int flush(struct Bit_writer *w);
 
+/*Inflate*/
+static int get_bits(struct Bit_reader *r, int n);
+static int fixed_tables(struct Huffman *literal_h,struct Huffman *distance_h);
+static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct Huffman *distance_h);
+static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n);
+static int decode_huffman(struct Bit_reader *r, struct Huffman *t);
+static int inflate_block(struct Bit_reader *r,uint8_t *out, uint64_t out_size,uint64_t *pos,struct Huffman *literal_h, struct Huffman *distance_h);
+
 /*-----------------------------------*/
 
 /*-------------- Read GZIP---------------------*/
 
 /*this just return the offset where the deflate stream starts*/
-static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize)
+long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize)
 {
 	if(file_size < 18) return -1;
 	if(content[0] != 0x1f || content[1] != 0x8b || content[2] != 8) return -1;
@@ -81,8 +89,11 @@ static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uin
 		if(off + 2 < file_size) off +=2;
 	}
 	
+	if(off + 8 > file_size) return -1;
+
 	/* read ISIZE and CRC-32  from the end
 	 * ISIZE is reversed little endian*/
+
 	uint8_t *p = &content[file_size - 4];
 	*isize = *p | ((*(p + 1) << 8))| (*(p + 2 ) << 16) | ((uint32_t)*(p + 3)<< 24);
 	*crc32 = content[file_size - 8];
@@ -131,6 +142,8 @@ long cd_ZIP(uint8_t *file_content,uint64_t file_size)
 
 		uint16_t comp_method= rd16(cd_p + 10);
 		uint32_t crc32 = rd32(cd_p + 16);
+		uint32_t compr_size = rd32(cd_p + 20);
+		uint32_t uncompr_size = rd32(cd_p + 24);
 		uint16_t file_name_l = rd16(cd_p + 28);
 		uint16_t extre_field_l = rd16(cd_p + 30);
 		uint16_t comment_l = rd16(cd_p + 32);
@@ -168,6 +181,167 @@ static int flush(struct Bit_writer *w)
 	}
 
 	return 0;
+}
+
+static int get_bits(struct Bit_reader *r, int n)
+{
+	if(n == 0) return -1;
+	while(r->nbits < n){
+		if(r->bread >= r->capacity) return -1;
+		r->accumulator |= (uint32_t)r->buffer[r->bread++] << r->nbits;
+		r->nbits += 8;
+	}
+
+	int v = r->accumulator & ((1u << n) - 1);
+	r->accumulator >>= n;
+	r->nbits -= n;
+	return v;
+}
+
+static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct Huffman *distance_h)
+{
+	int hlit,hdist,hclen;
+	if((hlit = get_bits(r,5)) == -1 
+			|| ((hdist = get_bits(r,5))) == -1
+			|| ((hclen = get_bits(r,4))) == -1) return -1;
+
+	hlit += 257;
+	hdist += 1;
+	hclen += 4;
+	if (hlit > 286 || hdist >= 30) return -1;
+
+	uint8_t cl_len[19] = {0};
+	for(int k = 0; k < hclen; k++){
+		int v = get_bits(r,3);
+		if(v < 0) return -1;
+		cl_len[cl_order[k]] = (uint8_t)v;
+	}
+
+	struct Huffman clh = {0};
+	if(build_huffman_tables(&clh,cl_len,19) == -1) return -1;
+
+	uint8_t lens[288+30] = {0};
+	int n = hlit + hdist, i = 0;
+	while(i < n){
+		int sym = decode_huffman(r,&clh);
+		if(sym == 0) return -1;
+
+		if(sym < 16){
+			lens[i++] = (uint8_t)sym;
+		}else if(sym == 16){
+			if (i == 0)return -1;
+			uint8_t prev = lens[i-1];
+			int rep = get_bits(r,2);
+			if(rep < 0) return -1;
+			rep += 3;
+			while(rep-- && i < n) lens[i++] = prev;
+		}else if(sym == 17){
+			int rep = get_bits(r,3);
+			if(rep < 0) return -1;
+			rep += 3;
+			while(rep-- && i < n) i++;
+		}else{
+			int rep = get_bits(r,7);
+			if(rep < 0) return -1;
+			rep += 11;
+			while(rep-- && i < n) i++;
+		}
+	}
+
+	if(build_huffman_tables(literal_h,lens,hlit) == -1) return -1;
+	if(build_huffman_tables(distance_h,lens + hlit,hdist) == -1) return -1;
+	return 0;
+}
+
+static int fixed_tables(struct Huffman *literal_h,struct Huffman *distance_h)
+{
+
+	int i;
+	uint8_t l[288] = {0}, d[30] = {0};
+
+	for(i = 0; i < 144;i++) l[i] = 8;
+	for(i = 144; i < 256;i++) l[i] = 9;
+	for(i = 256; i < 280;i++) l[i] = 7;
+	for(i = 280; i < 288 ;i++) l[i] = 8;
+
+	if(build_huffman_tables(literal_h,l,288) == -1) return -1;
+	memset(d,5,30);
+	if(build_huffman_tables(distance_h,d,30) == -1) return -1;
+}
+static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n)
+{
+	for(int i = 0; i < n; i++) t->count[len[i]]++; 
+	if(t->count[0] == n) return -1;
+
+	int left = 1;
+	for(int l = 1; l <= 15; l++){
+		left <<= 1;
+		left -= t->count[l];
+		if(left < 0)return -1;
+	}
+
+	uint16_t offs[16];
+	for(int i = 1; i <= 15;i++){
+		offs[i+1] = offs[i] + t->count[i];
+	}
+
+	for(int i = 0; i <= n ; i++)
+		if(len[i]) t->symbol[offs[len[i]]++] = i;
+
+	return 0;
+}
+static int decode_huffman(struct Bit_reader *r, struct Huffman *t)
+{
+	int code = 0, first = 0, index = 0;
+	for(int i = 1; i <= 15; i++){
+		int b = 0;
+		if((b = get_bits(r,1)) == -1) return -1;
+
+		code |= b;
+		int count = t->count[i];
+		if((code - first) < count)
+			return t->symbol[index + (code - first)];
+		index += count;
+		first = (first + count) << 1;
+		code <<= 1;
+	}
+	
+	return -1;
+}
+
+static int inflate_block(struct Bit_reader *r,uint8_t *out, uint64_t out_size,uint64_t *pos,struct Huffman *literal_h, struct Huffman *distance_h)
+{
+
+	for(;;){
+		int sym = decode_huffman(r,literal_h);
+		if(sym == 0) return -1;
+
+		if(sym < 256){
+			if(*pos >= out_size) return -1;
+			out[(*pos)++] = (uint8_t)sym;
+			continue;
+		}
+		if(sym == 256) return 0;
+		
+		int li = sym - 257;
+		if(li >= 29) return -1;
+
+		int e = 0;
+		if((e = get_bits(r,length_extra[li])) == -1) return -1;
+		int len = length_base[li] + e;
+
+		int ds = decode_huffman(r,distance_h);
+		if(ds < 0 || ds >= 30) return -1;
+
+		if((e = get_bits(r,distance_extra[ds])) == -1) return -1;
+		int dist = distance_base[ds] + e;
+		
+		if((uint64_t)dist > *pos) return -1;
+		if((*pos +len) > out_size) return -1;
+	
+		uint64_t from = *pos - dist;
+		while(len--) out[(*pos)++] = out[from++];
+	}
 }
 
 static int put_bits(struct Bit_writer *w,uint32_t value,int n)
@@ -673,4 +847,47 @@ clean_on_failure:
 	if(w.buffer) free(w.buffer);
 	free(pairs);
 	return -1;
+}
+
+long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size)
+{
+	struct Bit_reader r = {0,input_size,0,0,input};
+	uint64_t pos = 0;
+	struct Huffman literal_h = {0}, distance_h = {0};
+
+	for(;;){
+		int final = get_bits(&r,1); 
+		int type = get_bits(&r,2); 
+		if(type == -1 || final == -1) return -1;
+
+
+		switch(type){
+		case 0:
+			r.accumulator = 0;
+			r.nbits = 0;
+			if(r.bread + 4 > r.capacity) return -1;
+			uint16_t len = r.buffer[r.bread] | (r.buffer[r.bread+1] << 8);
+			uint16_t nlen = r.buffer[r.bread+2] | (r.buffer[r.bread+3] << 8);
+			r.bread += 4;
+			if((uint16_t)~len != nlen) return -1;
+			if(r.bread + 4 > r.capacity || pos + len > output_size ) return -1;
+			memcpy(output + pos,r.buffer + r.bread,len);
+			r.bread += len;
+			pos += len;
+			break;
+		case 1:
+			if(fixed_tables(&literal_h,&distance_h) == -1) return -1;
+			if(inflate_block(&r,output,output_size,&pos,&literal_h,&distance_h) == -1) return -1;
+			break;
+		case 2:
+			if(dynamic_tables(&r,&literal_h,&distance_h) == -1) return -1;
+			if(inflate_block(&r,output,output_size,&pos,&literal_h,&distance_h) == -1) return -1;
+			break;
+		default:
+			return -1;
+		}
+
+		if(final) break;
+	}
+	return (long long) pos;
 }
