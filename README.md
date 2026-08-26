@@ -18,3 +18,9 @@ you just call the **deflate()** function, you pass the input, the input size, an
         }
 ```
 the caller of this function has to free the result **df_in**.
+
+# Useful documentation
+
+[LZ77 algo](https://en.wikipedia.org/wiki/LZ77_and_LZ78)
+[GZIP](https://en.wikipedia.org/wiki/Gzip)
+[.ZIP](https://en.wikipedia.org/wiki/ZIP_(file_format))
