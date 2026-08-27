@@ -23,6 +23,7 @@ the caller of this function has to free the result **df_in**.
 
 | Document / Topic | Category | Link |
 | :--- | :--- | :--- |
+| **RFC 1951** | Deflate specification 1.3 | [Read RFC](https://datatracker.ietf.org/doc/html/rfc1951)) |
 | **LZ77 Algorithm** | Compression Algorithm | [Read Wiki Article](https://en.wikipedia.org/wiki/LZ77_and_LZ78) |
 | **GZIP** | File Format & Software | [Read Wiki Article](https://en.wikipedia.org/wiki/Gzip) |
 | **.ZIP** | Archive File Format | [Read Wiki Article](https://en.wikipedia.org/wiki/ZIP_(file_format)) |
