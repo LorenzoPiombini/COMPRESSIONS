@@ -30,7 +30,7 @@ static int is_node_empty(struct Hnode *n);
 static int LZ77_binary(uint8_t *input,struct LDpair **pairs);
 static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
-/*static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);*/
+static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
 
 /*---- Heap tree functions -----*/
@@ -60,6 +60,7 @@ static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct
 static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n);
 static int decode_huffman(struct Bit_reader *r, struct Huffman *t);
 static int inflate_block(struct Bit_reader *r,uint8_t *out, uint64_t out_size,uint64_t *pos,struct Huffman *literal_h, struct Huffman *distance_h);
+static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size);
 
 /*-----------------------------------*/
 
@@ -185,7 +186,7 @@ static int flush(struct Bit_writer *w)
 
 static int get_bits(struct Bit_reader *r, int n)
 {
-	if(n == 0) return -1;
+	if(n == 0) return 0;
 	while(r->nbits < n){
 		if(r->bread >= r->capacity) return -1;
 		r->accumulator |= (uint32_t)r->buffer[r->bread++] << r->nbits;
@@ -208,7 +209,7 @@ static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct
 	hlit += 257;
 	hdist += 1;
 	hclen += 4;
-	if (hlit > 286 || hdist >= 30) return -1;
+	if (hlit > 286 || hdist > 30) return -1;
 
 	uint8_t cl_len[19] = {0};
 	for(int k = 0; k < hclen; k++){
@@ -220,11 +221,11 @@ static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct
 	struct Huffman clh = {0};
 	if(build_huffman_tables(&clh,cl_len,19) == -1) return -1;
 
-	uint8_t lens[288+30] = {0};
+	uint8_t lens[286+30] = {0};
 	int n = hlit + hdist, i = 0;
 	while(i < n){
 		int sym = decode_huffman(r,&clh);
-		if(sym == 0) return -1;
+		if(sym < 0) return -1;
 
 		if(sym < 16){
 			lens[i++] = (uint8_t)sym;
@@ -234,6 +235,7 @@ static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct
 			int rep = get_bits(r,2);
 			if(rep < 0) return -1;
 			rep += 3;
+			if(i + rep > n) return -1;
 			while(rep-- && i < n) lens[i++] = prev;
 		}else if(sym == 17){
 			int rep = get_bits(r,3);
@@ -281,11 +283,11 @@ static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n)
 	}
 
 	uint16_t offs[16];
-	for(int i = 1; i <= 15;i++){
+	for(int i = 1; i < 15;i++){
 		offs[i+1] = offs[i] + t->count[i];
 	}
 
-	for(int i = 0; i <= n ; i++)
+	for(int i = 0; i < n ; i++)
 		if(len[i]) t->symbol[offs[len[i]]++] = i;
 
 	return 0;
@@ -314,7 +316,7 @@ static int inflate_block(struct Bit_reader *r,uint8_t *out, uint64_t out_size,ui
 
 	for(;;){
 		int sym = decode_huffman(r,literal_h);
-		if(sym == 0) return -1;
+		if(sym < 0) return -1;
 
 		if(sym < 256){
 			if(*pos >= out_size) return -1;
@@ -849,7 +851,7 @@ clean_on_failure:
 	return -1;
 }
 
-long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size)
+static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size)
 {
 	struct Bit_reader r = {0,input_size,0,0,input};
 	uint64_t pos = 0;
@@ -890,4 +892,37 @@ long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t o
 		if(final) break;
 	}
 	return (long long) pos;
+}
+
+long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
+{
+	uint32_t crc32 = 0;
+	int32_t size_of_inflated = 0; 
+	long deflate_stream_offset = read_Gzip(file_content,file_size, &crc32,&size_of_inflated);
+	if(deflate_stream_offset == -1) return -1;
+
+	uint64_t deflate_size = file_size - 8 - deflate_stream_offset;
+	*inflated_outup = malloc(size_of_inflated);
+	if(!inflated_outup) return -1;
+	memset(*inflated_outup,0,size_of_inflated);
+	*inflated_outup_size = (uint64_t)size_of_inflated;
+
+	uint8_t *input = malloc(deflate_size);
+	if(!input){ 
+		free(inflated_outup);
+		return -1;
+	}
+
+	memset(input,0,deflate_size);
+	memcpy(input,&file_content[deflate_stream_offset],deflate_size);
+
+	if(inflate(input,deflate_size,*inflated_outup,size_of_inflated) == -1) {
+		free(*inflated_outup);
+		*inflated_outup = NULL;
+		free(input);
+		return -1;
+	}
+
+	free(input);
+	return 0;
 }

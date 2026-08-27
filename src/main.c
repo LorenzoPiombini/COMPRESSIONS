@@ -25,6 +25,39 @@ static uint32_t crc32(const uint8_t *buf, uint64_t len)
     return c ^ 0xFFFFFFFFu;
 }
 
+
+static int test_GZIP(char *argv){
+	uint8_t *file_content = NULL; 
+	FILE *fp = fopen(argv,"rb");
+	if(!fp)return -1;
+
+	if(fseek(fp,0,SEEK_END) == -1) goto failed;
+
+	long long size = 0;
+	if((size = ftell(fp)) == -1) goto failed;
+
+	rewind(fp);
+
+	file_content = malloc(size);
+	if(!file_content) goto failed;
+	if(fread(file_content,(size_t)size,1,fp) != 1) goto failed;
+
+	fclose(fp);
+	fp = NULL;
+	uint8_t *inflated_outup = NULL;
+	uint64_t inflated_outup_size = 0;
+	if(inflate_GZIP(file_content,size, &inflated_outup, &inflated_outup_size) == -1) goto failed;
+
+	free(file_content);
+	return 0;
+
+failed:
+	if(inflated_outup) free(inflated_outup);
+	if(fp) fclose(fp);
+	if(file_content) free(file_content);
+	return -1;
+}
+
 static int test_ZIP_read(char *argv){
 	uint8_t *file_content = NULL; 
 	FILE *fp = fopen(argv,"rb");
@@ -91,8 +124,12 @@ int main(int argc, char **argv){
 	free(i_bin);
 	free(df_in);
 
+	
+	test_GZIP(argv[1]);
+	/*
 	if(argv[1])
 		test_ZIP_read(argv[1]);
+		*/
 	
 	return 0;
 }
