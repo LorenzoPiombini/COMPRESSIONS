@@ -1,4 +1,5 @@
 #include <wchar.h>
+#include <stdio.h>
 #include "os_operations.h"
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -11,15 +12,16 @@
 	#include <windows.h>
 #endif
 
-
-int move_to_parent_dir()
+int change_dir(char* dir_name)
 {
-
-	if(!parent_dir[0]) return;
 #if defined(__linux__) || defined(__APPLE__)
+	if(chdir(dir_name) == -1) return -1;
+#elif defined(_WIN32) || defined(_WIN64)
+#endif
 
-
+	return 0;
 }
+
 int create_folder(char *file_name)
 {
 
@@ -28,7 +30,7 @@ int create_folder(char *file_name)
 		errno = 0;
 		if(getcwd(parent_dir,1024) == NULL){
 			if(errno == EINVAL){
-				fprintf(stderr,"bigger buffer for directory path")
+				fprintf(stderr,"bigger buffer for directory path");
 			}
 			return -1;
 		}

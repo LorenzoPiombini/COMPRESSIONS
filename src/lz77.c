@@ -203,15 +203,16 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 		
 		/*get the file name*/
 		char file_name[file_name_l+1];
-		file_name[file_name_l] = '\0';
 		/*bound check*/
 		if(((uint64_t)(cd_p - file_content) + 46) >= file_size) return -1; 
 
 		uint16_t i;
-		for(i = 0; i < file_name_l;i++) 
+		for(i = 0; i < file_name_l;i++){
 			file_name[i] = *(cd_p + 46 + i);
+			if(file_name[i] == '/') file_name[i] = '_';
+		}
 
-		if(build_file_path(file_name) == -1) return -1;
+		file_name[i] = '\0';
 
 		long long data_written = 0;
 		if(comp_method == 0){

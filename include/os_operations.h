@@ -8,5 +8,6 @@
 #endif
 
 int create_folder(char *file_name);
+int change_dir(char* dir_name);
 
 #endif
