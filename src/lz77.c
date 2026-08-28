@@ -153,34 +153,69 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 
 static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t))
 {
+
+	/*allocating once 10Kib*/
+	int arena_size = 1024*10;
+	uint8_t *inflated_data = malloc(arena_size);
+	if(!inflated_data) return -1;
+	memset(inflated_data,0,arena_size);
+
 	uint32_t central_directory_offset = 0;
 	uint16_t total_cd_records = 0;
-	
+
 	long EOCD_offset = find_EOCD_ZIP(file_content,file_size);
-	if(EOCD_offset == -1) return -1;
+	if(EOCD_offset == -1){
+		free(inflated_data);
+		return -1;
+	}
 
 	const uint8_t *p = &file_content[EOCD_offset + 10];
 	total_cd_records = rd16(p);
 
 	central_directory_offset = rd32(p + 6);
-	
+
 	/*bound check*/
-	if(central_directory_offset >= file_size) return -1;
+	if(central_directory_offset >= file_size){
+		free(inflated_data);
+		return -1;
+	}
 
 	const uint8_t *cd_p = &file_content[central_directory_offset];
 	for(uint16_t j = 0; j < total_cd_records; j++){
 		/*check magic number*/
-		if(*cd_p != 0x50 || *(cd_p + 1) != 0x4B || *(cd_p + 2)  != 0x01 || *(cd_p + 3 ) != 0x02) return -1;
+		if(*cd_p != 0x50 || *(cd_p + 1) != 0x4B || *(cd_p + 2)  != 0x01 || *(cd_p + 3 ) != 0x02){
+			free(inflated_data);
+			return -1;
+		}
 
 
 		uint16_t comp_method =		rd16(cd_p + 10);
-		if(comp_method != 0 && comp_method != 8) return -1;
+		if(comp_method != 0 && comp_method != 8){
+			free(inflated_data);
+			return -1;
+		}
 
 		uint32_t crc32 = 			rd32(cd_p + 16);
 		uint32_t compr_size = 		rd32(cd_p + 20);
 		uint32_t uncompr_size = 	rd32(cd_p + 24);
+		if(uncompr_size > arena_size){
+			/*realloc*/
+			
+			uint8_t *np = realloc(inflated_data,arena_size + uncompr_size);
+			if(!np){
+				free(inflated_data);
+				return -1;
+			}
+			fprintf(stdout,"reallocated from %d  to %d\n",arena_size, arena_size+uncompr_size);
+			inflated_data = np;
+			arena_size += uncompr_size;
+			memset(inflated_data,0,arena_size);
+		} 
 
-		if(comp_method == 0 && (compr_size != uncompr_size)) return -1;
+		if(comp_method == 0 && (compr_size != uncompr_size)){
+			free(inflated_data);
+			return -1;
+		}
 
 		uint16_t file_name_l = 		rd16(cd_p + 28);
 		uint16_t extra_field_l = 	rd16(cd_p + 30);
@@ -191,20 +226,22 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 
 		/*MOVE TO THE LOCAL HEADER */
 		uint8_t *lh = &file_content[file_pos];
-		if(lh[0] != 0x50 || lh[1]  != 0x4B || lh[2] != 0x03 || lh[3] != 0x04) return -1;
+		if(lh[0] != 0x50 || lh[1]  != 0x4B || lh[2] != 0x03 || lh[3] != 0x04){
+			free(inflated_data);
+			return -1;
+		}
 		/*skip the local header*/
 		uint16_t name_l = rd16(lh + 26);
 		uint16_t ef_size = rd16(lh + 28);
 		uint8_t *data_stream = lh + 30 + name_l + ef_size;
 
-		uint8_t *inflated_data = malloc(uncompr_size);
-		if(!inflated_data) return -1;
-		memset(inflated_data,0,uncompr_size);
-		
 		/*get the file name*/
 		char file_name[file_name_l+1];
 		/*bound check*/
-		if(((uint64_t)(cd_p - file_content) + 46) >= file_size) return -1; 
+		if(((uint64_t)(cd_p - file_content) + 46) >= file_size) {
+			free(inflated_data);
+			return -1;
+		}
 
 		uint16_t i;
 		for(i = 0; i < file_name_l;i++){
@@ -220,7 +257,10 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 			memcpy(inflated_data,data_stream,uncompr_size);
 		}else{
 			data_written = call_back_inflate(data_stream,(uint64_t)compr_size,inflated_data,uncompr_size);
-			if(data_written == -1) return -1;
+			if(data_written == -1) {
+				free(inflated_data);
+				return -1;
+			}
 
 		}
 
@@ -238,12 +278,13 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 			return -1;
 		}
 
-		free(inflated_data);
+		memset(inflated_data,0,arena_size); /*clear the memory each time instead of freeing it*/
 		fclose(fp);
 
 		/*set the pointer to the next central directory record*/
 		cd_p += (46 + file_name_l + comment_l + extra_field_l);
 	}
+	free(inflated_data);/*free only once*/
 	return 0;
 }
 
