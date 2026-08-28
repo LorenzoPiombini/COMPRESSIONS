@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include "lz77.h"
+#include "os_operations.h"
 
 
 #define rd16(n) (((uint16_t)(n)[0]) | ((uint16_t)(n)[1] << 8)) 
@@ -33,6 +34,7 @@ static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_
 static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
 static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t));
+static int build_file_path(char *file_name);
 
 /*---- Heap tree functions -----*/
 
@@ -105,14 +107,31 @@ long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *
 
 /*-----------.ZIP----------------*/
 
-static creates_folders(char *file_name){
+static int build_file_path(char *file_name)
+{
+	char fp_cpy[strlen(file_name)+1];
+	memset(fp_cpy,0,sizeof(fp_cpy));
+	strncpy(fp_cpy,file_name,sizeof(fp_cpy)-1);
+
 	char *dir = NULL;
 	char sub = '$';
-	while((dir = strstr(file_name,PATH_OS))){
+	while((dir = strstr(fp_cpy,PATH_OS))){
+		*dir = sub;
+		int end = dir - fp_cpy;
+		dir--;
+		while(dir != &fp_cpy[0] && *dir != sub) dir--;
 
+		if(*dir == sub) dir++;
 
+		int start = dir - fp_cpy;
+		int size = end - start + 1;
+		char d[size];
+		memset(d,0,size);
+		strncpy(d,dir,size-1);
+		if(create_folder(d) == -1) return -1;
 	}
 
+	return 0;
 
 }
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
@@ -191,6 +210,9 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 		uint16_t i;
 		for(i = 0; i < file_name_l;i++) 
 			file_name[i] = *(cd_p + 46 + i);
+
+		if(build_file_path(file_name) == -1) return -1;
+
 		long long data_written = 0;
 		if(comp_method == 0){
 			/*just copy the data*/
