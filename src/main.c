@@ -58,7 +58,7 @@ failed:
 	return -1;
 }
 
-static int test_ZIP_read(char *argv){
+static int test_ZIP(char *argv){
 	uint8_t *file_content = NULL; 
 	FILE *fp = fopen(argv,"rb");
 	if(!fp)return -1;
@@ -76,7 +76,7 @@ static int test_ZIP_read(char *argv){
 
 	fclose(fp);
 	fp = NULL;
-	if(cd_ZIP(file_content,size) == -1) goto failed;
+	if(unZIP(file_content,size) == -1) goto failed;
 
 	free(file_content);
 	return 0;
@@ -125,11 +125,8 @@ int main(int argc, char **argv){
 	free(df_in);
 
 	
-	test_GZIP(argv[1]);
-	/*
+	/*test_GZIP(argv[1]);*/
 	if(argv[1])
-		test_ZIP_read(argv[1]);
-		*/
-	
+		test_ZIP(argv[1]);
 	return 0;
 }

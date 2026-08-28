@@ -58,7 +58,9 @@ struct Huffman{
 	uint16_t symbol[288];
 };
 
+
+
 long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
 long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size);
-long cd_ZIP(uint8_t *file_content,uint64_t file_size);
+long long unZIP(uint8_t *file_content, uint64_t file_size);
 #endif

@@ -32,6 +32,7 @@ static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t r
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
+static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t));
 
 /*---- Heap tree functions -----*/
 
@@ -53,7 +54,7 @@ static int put_bits(struct Bit_writer *w,uint32_t value,int n);
 static int put_code(struct Bit_writer *w,uint64_t code,int len);
 static int flush(struct Bit_writer *w);
 
-/*Inflate*/
+/* Inflate */
 static int get_bits(struct Bit_reader *r, int n);
 static int fixed_tables(struct Huffman *literal_h,struct Huffman *distance_h);
 static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct Huffman *distance_h);
@@ -66,7 +67,8 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 
 /*-------------- Read GZIP---------------------*/
 
-/*this just return the offset where the deflate stream starts*/
+/*return the offset where the deflate stream starts
+ * the caller has to compute the defalte stream size from there*/
 long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize)
 {
 	if(file_size < 18) return -1;
@@ -101,6 +103,18 @@ long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *
 	return (long) off;
 }
 
+/*-----------.ZIP----------------*/
+
+static creates_folders(char *file_name){
+	char *dir = NULL;
+	char sub = '$';
+	while((dir = strstr(file_name,PATH_OS))){
+
+
+	}
+
+
+}
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 {
 	/*0x0000FFFF is 2^16 - 1 (65,535) max comment size after EOCD in a .ZIP file*/
@@ -118,9 +132,8 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 	return -1;
 }
 
-long cd_ZIP(uint8_t *file_content,uint64_t file_size)
+static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t))
 {
-
 	uint32_t central_directory_offset = 0;
 	uint16_t total_cd_records = 0;
 	
@@ -128,10 +141,9 @@ long cd_ZIP(uint8_t *file_content,uint64_t file_size)
 	if(EOCD_offset == -1) return -1;
 
 	const uint8_t *p = &file_content[EOCD_offset + 10];
-	total_cd_records = *p | ((uint16_t)*(p + 1) << 8);
-	/*advance 6 bytes to get to offset 16 from EOCD_offset*/
-	p += 6; 
-	central_directory_offset = *p | (*(p + 1) << 8) | (*(p + 2) << 16) | ((uint32_t)*(p + 3) << 24);
+	total_cd_records = rd16(p);
+
+	central_directory_offset = rd32(p + 6);
 	
 	/*bound check*/
 	if(central_directory_offset >= file_size) return -1;
@@ -141,15 +153,36 @@ long cd_ZIP(uint8_t *file_content,uint64_t file_size)
 		/*check magic number*/
 		if(*cd_p != 0x50 || *(cd_p + 1) != 0x4B || *(cd_p + 2)  != 0x01 || *(cd_p + 3 ) != 0x02) return -1;
 
-		uint16_t comp_method= rd16(cd_p + 10);
-		uint32_t crc32 = rd32(cd_p + 16);
-		uint32_t compr_size = rd32(cd_p + 20);
-		uint32_t uncompr_size = rd32(cd_p + 24);
-		uint16_t file_name_l = rd16(cd_p + 28);
-		uint16_t extre_field_l = rd16(cd_p + 30);
-		uint16_t comment_l = rd16(cd_p + 32);
-		uint32_t file_pos = rd32(cd_p + 42);
 
+		uint16_t comp_method =		rd16(cd_p + 10);
+		if(comp_method != 0 && comp_method != 8) return -1;
+
+		uint32_t crc32 = 			rd32(cd_p + 16);
+		uint32_t compr_size = 		rd32(cd_p + 20);
+		uint32_t uncompr_size = 	rd32(cd_p + 24);
+
+		if(comp_method == 0 && (compr_size != uncompr_size)) return -1;
+
+		uint16_t file_name_l = 		rd16(cd_p + 28);
+		uint16_t extra_field_l = 	rd16(cd_p + 30);
+		uint16_t comment_l = 		rd16(cd_p + 32);
+		uint32_t file_pos =			rd32(cd_p + 42);
+
+		if(file_pos > file_size) return -1;
+
+		/*MOVE TO THE LOCAL HEADER */
+		uint8_t *lh = &file_content[file_pos];
+		if(lh[0] != 0x50 || lh[1]  != 0x4B || lh[2] != 0x03 || lh[3] != 0x04) return -1;
+		/*skip the local header*/
+		uint16_t name_l = rd16(lh + 26);
+		uint16_t ef_size = rd16(lh + 28);
+		uint8_t *data_stream = lh + 30 + name_l + ef_size;
+
+		uint8_t *inflated_data = malloc(uncompr_size);
+		if(!inflated_data) return -1;
+		memset(inflated_data,0,uncompr_size);
+		
+		/*get the file name*/
 		char file_name[file_name_l+1];
 		file_name[file_name_l] = '\0';
 		/*bound check*/
@@ -158,12 +191,36 @@ long cd_ZIP(uint8_t *file_content,uint64_t file_size)
 		uint16_t i;
 		for(i = 0; i < file_name_l;i++) 
 			file_name[i] = *(cd_p + 46 + i);
+		long long data_written = 0;
+		if(comp_method == 0){
+			/*just copy the data*/
+			memcpy(inflated_data,data_stream,uncompr_size);
+		}else{
+			data_written = call_back_inflate(data_stream,(uint64_t)compr_size,inflated_data,uncompr_size);
+			if(data_written == -1) return -1;
 
-		printf("%s\n",file_name);
+		}
+
+		/*WRITE THE FILE*/
+		FILE *fp = fopen(file_name,"w");
+		if(!fp){
+			free(inflated_data);
+			return -1;
+		}
+
+		long long size_to_write = (long long)((data_written != 0 ? data_written : uncompr_size));
+		if(fwrite(inflated_data,1,size_to_write,fp) != size_to_write){
+			fclose(fp);
+			free(inflated_data);
+			return -1;
+		}
+
+		free(inflated_data);
+		fclose(fp);
+
 		/*set the pointer to the next central directory record*/
-		cd_p += (46 + file_name_l + comment_l + extre_field_l);
+		cd_p += (46 + file_name_l + comment_l + extra_field_l);
 	}
-
 	return 0;
 }
 
@@ -259,7 +316,7 @@ static int fixed_tables(struct Huffman *literal_h,struct Huffman *distance_h)
 {
 
 	int i;
-	uint8_t l[288] = {0}, d[30] = {0};
+	uint8_t l[288] = {0}, d[32] = {0};
 
 	for(i = 0; i < 144;i++) l[i] = 8;
 	for(i = 144; i < 256;i++) l[i] = 9;
@@ -267,11 +324,12 @@ static int fixed_tables(struct Huffman *literal_h,struct Huffman *distance_h)
 	for(i = 280; i < 288 ;i++) l[i] = 8;
 
 	if(build_huffman_tables(literal_h,l,288) == -1) return -1;
-	memset(d,5,30);
-	if(build_huffman_tables(distance_h,d,30) == -1) return -1;
+	memset(d,5,32);
+	if(build_huffman_tables(distance_h,d,32) == -1) return -1;
 }
 static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n)
 {
+	for(int i = 0; i < 16; i++) t->count[i] = 0;
 	for(int i = 0; i < n; i++) t->count[len[i]]++; 
 	if(t->count[0] == n) return -1;
 
@@ -282,7 +340,7 @@ static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n)
 		if(left < 0)return -1;
 	}
 
-	uint16_t offs[16];
+	uint16_t offs[16] ={0};
 	for(int i = 1; i < 15;i++){
 		offs[i+1] = offs[i] + t->count[i];
 	}
@@ -865,6 +923,7 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 
 		switch(type){
 		case 0:
+		{
 			r.accumulator = 0;
 			r.nbits = 0;
 			if(r.bread + 4 > r.capacity) return -1;
@@ -872,11 +931,12 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 			uint16_t nlen = r.buffer[r.bread+2] | (r.buffer[r.bread+3] << 8);
 			r.bread += 4;
 			if((uint16_t)~len != nlen) return -1;
-			if(r.bread + 4 > r.capacity || pos + len > output_size ) return -1;
+			if(r.bread + len > r.capacity || pos + len > output_size ) return -1;
 			memcpy(output + pos,r.buffer + r.bread,len);
 			r.bread += len;
 			pos += len;
 			break;
+		}
 		case 1:
 			if(fixed_tables(&literal_h,&distance_h) == -1) return -1;
 			if(inflate_block(&r,output,output_size,&pos,&literal_h,&distance_h) == -1) return -1;
@@ -925,4 +985,9 @@ long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **infl
 
 	free(input);
 	return 0;
+}
+
+long long unZIP(uint8_t *file_content, uint64_t file_size)
+{
+	walk_central_directory_ZIP(file_content,file_size,inflate);
 }
