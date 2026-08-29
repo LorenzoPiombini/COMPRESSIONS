@@ -6,27 +6,6 @@
 #include "lz77.h"
 #include "os_operations.h"
 
-static uint32_t crc_table[256];
-
-static void crc32_init(void)
-{
-    for(uint32_t i = 0; i < 256; i++){
-        uint32_t c = i;
-        for(int k = 0; k < 8; k++)
-            c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
-        crc_table[i] = c;
-    }
-}
-
-static uint32_t crc32(const uint8_t *buf, uint64_t len)
-{
-    uint32_t c = 0xFFFFFFFFu;
-    for(uint64_t i = 0; i < len; i++)
-        c = crc_table[(c ^ buf[i]) & 0xFF] ^ (c >> 8);
-    return c ^ 0xFFFFFFFFu;
-}
-
-
 static int test_GZIP(char *argv){
 	uint8_t *file_content = NULL; 
 	FILE *fp = fopen(argv,"rb");

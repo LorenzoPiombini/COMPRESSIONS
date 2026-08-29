@@ -96,15 +96,14 @@ static uint32_t crc32(const uint8_t *buf, uint64_t len)
 
 /*Compressions format*/
 struct Gzip_h{
+	uint8_t *extr_field;/*size declared in xlen*/ /*might not be written*/
+	uint32_t mtime;
 	uint16_t magic;
+	uint16_t xlen;/*might not be written*/
 	uint8_t compression_method;
 	uint8_t flags;
-	uint32_t mtime;
 	uint8_t xfl;
 	uint8_t os;
-	/*might not be written*/
-	uint16_t xlen;
-	uint8_t *extr_field;/*size declared in xlen*/
 };
 
 static void gzip_header_init(struct Gzip_h *h);
@@ -119,6 +118,7 @@ static void gzip_header_init(struct Gzip_h *h)
 	/*0000 0100*/
 	h->flag = 0x08;
 	h->xlen = 0;
+	h->os = 255;
 }
 
 static int write_gzip_header(struct Gzip_h *h, uint8_t *buf)
@@ -1101,22 +1101,75 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 }
 
 
-int Gzip_file(uint8_t *stream, uint64_t stream_size)
+int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
 {
-	
-	crc32_init();
-	uint32_t c32 crc32(stream);
-	
+	int file_name_l = (int)strlen(file_name)+1;
+	char compressed_file_name[file_name_l+3];
+	memset(compressed_file_name,0,file_name_l+3);
+
+	strncpy(compressed_file_name,file_name,file_name_l -4);
+	strncat(compressed_file_name,".gz",3);
 	uint8_t *deflated_stream = NULL;
 	long long comp_size = deflate(stream,stream_size,&deflated_stream);
 	if(comp_size == -1) return -1;
 
+	crc32_init();
+	uint32_t c32 = crc32(stream,stream_size);
+
+
 	struct Gzip_h h;
-	long offset = gzip_header_init(h)
+	uint8_t h_buf[12] = {0};
+	int offset = gzip_header_init(h,h_buf);
 
+	int file_name_l = (int)strlen(file_name)+1;
+	long allocate_mem = offset + file_name_l + comp_size + 8;
+	uint8_t *writable_out = malloc(offset+file_name_s+comp_size+8);
+	if(!writable_out){
+		free(deflated_stream);
+		return -1;
+	}
+	memset(writable_out,0,allocate_mem);
+
+	uint64_t bwritten = 0;
+	memcpy(&writable_out[bwritten],h_buf,offset);
+	bwritten += offset;
+
+	memcpy(&writable_out[bwritten],file_name,file_name_l - 1);
+	bwritten += file_name_l;
 	
+	memcpy(&writable_out[bwritten],deflated_stream,comp_size);
+	bwritten += comp_size;
+	
+	crc32_init();
+	uint32_t c32 = crc32(stream,stream_size);
 
+	writable_out[bwritten++] = crc32 | 0xFF; 
+	writable_out[bwritten++] = (crc32 >> 8) | 0xFF; 
+	writable_out[bwritten++] = (crc32 >> 16) | 0xFF; 
+	writable_out[bwritten++] = (crc32 >> 24 )| 0xFF; 
 
+	uint32_t size = (uint32_t) stream_size;
+	writable_out[bwritten++] = 	size | 0xFF; 
+	writable_out[bwritten++] = 	(size >> 8)  | 0xFF; 
+	writable_out[bwritten++] = 	(size >> 16) | 0xFF; 
+	writable_out[bwritten] = 	(size >> 24) | 0xFF; 
+
+	FILE *fp = fopen(compressed_file_name,"w");
+	if(!fp){
+		free(deflated_stream);
+		free(writable_out);
+		return -1;
+	}
+
+	if(fwrite(writable_out,1,allocate_mem,fp) != allocate_mem) {
+		free(deflated_stream);
+		free(writable_out);
+		return -1;
+	}
+
+	free(deflated_stream);
+	free(writable_out);
+	return 0;
 }
 long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
 {
