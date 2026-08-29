@@ -10,6 +10,7 @@
 	char parent_dir[1024] = {0};
 #elif defined(_WIN32) || defined(_WIN64)
 	#include <windows.h>
+	wchar_t parent_dir[1024] = {0};
 #endif
 
 int change_dir(char* dir_name)
@@ -17,8 +18,17 @@ int change_dir(char* dir_name)
 #if defined(__linux__) || defined(__APPLE__)
 	if(chdir(dir_name) == -1) return -1;
 #elif defined(_WIN32) || defined(_WIN64)
-#endif
+	/*WINDOWS migth use wchar_t we need to convert the char * to wchar_t * */
+	mbstate_t ps = 0;
+	size_t l = strlen(dir_name);
+	wchar_t wstr[l+1];
+	wmemset(wstr,0,l+1);
 
+	size_t error = -1;
+    if(mbsnrtowcs(wstr,file_name,l,l,&ps) == -1) return -1;
+
+	if(!SetCurrentDirectory(wstr)) return -1;
+#endif
 	return 0;
 }
 
@@ -47,6 +57,15 @@ int create_folder(char *file_name)
 	}
 
 #elif defined(_WIN32) || defined(_WIN64)
+	if(!parent_dir[0]){
+		DWORD res = 0;
+		if(!(res == GetCurrentDirectory(1024, parent_dir))){
+			if(res > 1024){
+				fprintf(stderr,"bigger buffer for directory path is needed.\n");
+			}
+			return -1;
+		}
+	}
 	/*WINDOWS migth use wchar_t we need to convert the char * to wchar_t * */
 	mbstate_t ps = 0;
 	size_t l = strlen(file_name);

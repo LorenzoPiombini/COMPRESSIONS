@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 #include "lz77.h"
 #include "os_operations.h"
 
@@ -36,6 +37,7 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
 static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t));
 static int build_file_path(char *file_name);
 
+
 /*---- Heap tree functions -----*/
 
 static void heap_swap(struct Heap *h,int a, int b);
@@ -67,7 +69,87 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 
 /*-----------------------------------*/
 
-/*-------------- Read GZIP---------------------*/
+/* ===============COMPRESSION FILE FORMAT GZIP - ZIP ======================== */
+static uint32_t crc_table[256];
+static void crc32_init(void);
+static uint32_t crc32(const uint8_t *buf, uint64_t len);
+
+static void crc32_init(void)
+{
+    for(uint32_t i = 0; i < 256; i++){
+        uint32_t c = i;
+        for(int k = 0; k < 8; k++)
+            c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+        crc_table[i] = c;
+    }
+}
+
+static uint32_t crc32(const uint8_t *buf, uint64_t len)
+{
+    uint32_t c = 0xFFFFFFFFu;
+    for(uint64_t i = 0; i < len; i++)
+        c = crc_table[(c ^ buf[i]) & 0xFF] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+}
+/*-------------- GZIP---------------------*/
+
+
+/*Compressions format*/
+struct Gzip_h{
+	uint16_t magic;
+	uint8_t compression_method;
+	uint8_t flags;
+	uint32_t mtime;
+	uint8_t xfl;
+	uint8_t os;
+	/*might not be written*/
+	uint16_t xlen;
+	uint8_t *extr_field;/*size declared in xlen*/
+};
+
+static void gzip_header_init(struct Gzip_h *h);
+static void write_gzip_header(struct Gzip_h *h, uint8_t *buf);
+
+static void gzip_header_init(struct Gzip_h *h)
+{
+	memset(h,0,sizeof *h);
+	h->magic = 0x1f | ((uint16_t)0x8b << 8);
+	h->compression_method = 8;
+	h->mtime = (uint32_t)time(NULL);
+	/*0000 0100*/
+	h->flag = 0x08;
+	h->xlen = 0;
+}
+
+static int write_gzip_header(struct Gzip_h *h, uint8_t *buf)
+{
+	if(h->magic == 0) return -1;
+
+	int bread = 0;
+	buf[0] = h->magic & 0xFF;
+	buf[1] = (h->magic >> 8) & 0xFF;
+	buf[2] = h->compression_method;
+	buf[3] = h->flags;
+	if(h->mtime == 0){
+		buf[4] = 0;
+		buf[5] = 0;
+		buf[6] = 0;
+		buf[7] = 0;
+	} else {
+		buf[4] = h->mtime & 0xFF;
+		buf[5] = (h->mtime >> 8) & 0xFF;
+		buf[6] = (h->mtime >> 16) & 0xFF;
+		buf[7] = (h->mtime >> 24) & 0xFF;
+	}
+	buf[8] = h->xfl;
+	buf[9] = h->os;
+	if(h->xlen != 0){
+		buf[10] = h->xlen & 0xFF;
+		buf[11] = (h->xlen >> 8) & 0xFF;
+		return 12;
+	}
+	return 10;
+}
 
 /*return the offset where the deflate stream starts
  * the caller has to compute the defalte stream size from there*/
@@ -1018,6 +1100,24 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 	return (long long) pos;
 }
 
+
+int Gzip_file(uint8_t *stream, uint64_t stream_size)
+{
+	
+	crc32_init();
+	uint32_t c32 crc32(stream);
+	
+	uint8_t *deflated_stream = NULL;
+	long long comp_size = deflate(stream,stream_size,&deflated_stream);
+	if(comp_size == -1) return -1;
+
+	struct Gzip_h h;
+	long offset = gzip_header_init(h)
+
+	
+
+
+}
 long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
 {
 	uint32_t crc32 = 0;
@@ -1053,5 +1153,6 @@ long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **infl
 
 long long unZIP(uint8_t *file_content, uint64_t file_size)
 {
-	walk_central_directory_ZIP(file_content,file_size,inflate);
+	if(walk_central_directory_ZIP(file_content,file_size,inflate) == -1) return -1;
+	return 0
 }
