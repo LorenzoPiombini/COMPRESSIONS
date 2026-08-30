@@ -7,7 +7,10 @@
 	#define PATH_OS "\\"
 #endif
 
+#include <stdint.h>
 int create_folder(char *file_name);
 int change_dir(char* dir_name);
+int write_file(char *compressed_file_name,uint8_t *data, uint64_t size);
+long long read_file(char *file_name, uint8_t **file_content);
 
 #endif

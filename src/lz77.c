@@ -29,7 +29,7 @@ static void gen_len_to_code_table(uint16_t *table);
 static uint8_t dist_code(uint32_t d);
 static uint16_t len_code(uint16_t l);
 static int is_node_empty(struct Hnode *n);
-static int LZ77_binary(uint8_t *input,struct LDpair **pairs);
+static int LZ77_binary(uint8_t *input, uint64_t input_size, struct LDpair **pairs);
 static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
@@ -107,7 +107,7 @@ struct Gzip_h{
 };
 
 static void gzip_header_init(struct Gzip_h *h);
-static void write_gzip_header(struct Gzip_h *h, uint8_t *buf);
+static int write_gzip_header(struct Gzip_h *h, uint8_t *buf);
 
 static void gzip_header_init(struct Gzip_h *h)
 {
@@ -116,7 +116,7 @@ static void gzip_header_init(struct Gzip_h *h)
 	h->compression_method = 8;
 	h->mtime = (uint32_t)time(NULL);
 	/*0000 0100*/
-	h->flag = 0x08;
+	h->flags = 0x08;
 	h->xlen = 0;
 	h->os = 255;
 }
@@ -828,23 +828,27 @@ static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t r
 	*out_dist = (uint16_t)best_distance;
 }
 
-static int LZ77_binary(uint8_t *input,struct LDpair **pairs)
+static int LZ77_binary(uint8_t *input, uint64_t input_size, struct LDpair **pairs)
 {
-	uint64_t *pairs_size = ((uint64_t*)(*pairs) - 1);
-	uint64_t input_size = *((uint64_t*)input - 1);
+	uint64_t *size = ((uint64_t*)(*pairs) - 1);
+	uint64_t **pairs_size = &size;
 
 	struct LZstate state = {0};
 	LZstate_init(&state);
 	uint64_t i = 0;
 	uint64_t bread = 0;
-
 	while(bread < input_size) {
-		if(i >= *pairs_size){
-			struct LDpair *np = realloc(pairs_size,sizeof(uint64_t) + (sizeof *pairs * (*pairs_size) * 2));
+		if(i >= **pairs_size){
+			uint64_t old_size = **pairs_size * sizeof **pairs;
+			uint64_t new_size = old_size * 2;
+			uint64_t *np = realloc(*pairs_size,sizeof(uint64_t) + new_size);
 			if(!np) return -1;
-			pairs_size = (uint64_t*)np;
-			*pairs = (struct LDpair*)(pairs_size + 1);
-			*pairs_size = *pairs_size * 2;
+
+			memset((uint8_t*)np + old_size + sizeof(uint64_t),0,new_size - old_size);
+
+			*np = new_size / sizeof **pairs; 
+			*pairs_size = np;
+			*pairs = (struct LDpair *)(np + 1);
 		}
 
 		uint16_t dist,len;
@@ -889,14 +893,15 @@ void decode_LZ77(struct LDpair *pairs, uint64_t actual_pair, uint8_t *decoded_da
 long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 {
 	size_t pair_size = input_size / sizeof(struct LDpair);
-	pair_size *= sizeof(struct LDpair);
 
 	uint64_t *pairs = (uint64_t*)malloc(sizeof(uint64_t) + (sizeof(struct LDpair) *pair_size));
 	if(!pairs) return -1;
+
 	memset(pairs,0,sizeof(uint64_t) + ((sizeof(struct LDpair) * pair_size)));
 	*pairs = pair_size;
 	struct LDpair *p = (struct LDpair *)( pairs + 1);
-	uint64_t tokens = LZ77_binary(input,&p);
+
+	uint64_t tokens = LZ77_binary(input,input_size,&p);
 
 	uint32_t lit_freq[286] = {0};
 	uint32_t dist_freq[30] = {0};
@@ -1045,7 +1050,7 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 	if(put_code(&w,lit_codes[256],code_len[256]) == -1) goto clean_on_failure;
 	flush(&w);
 
-	free(pairs);
+	free((uint64_t*)p - 1);
 	*deflate_input = w.buffer;
 	return (long long) w.bwritten;
 
@@ -1103,27 +1108,24 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 
 int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
 {
-	int file_name_l = (int)strlen(file_name)+1;
-	char compressed_file_name[file_name_l+3];
-	memset(compressed_file_name,0,file_name_l+3);
+	int file_name_l = (int)strlen(file_name);
+	char compressed_file_name[file_name_l+4];
+	memset(compressed_file_name,0,file_name_l+4);
 
-	strncpy(compressed_file_name,file_name,file_name_l -4);
-	strncat(compressed_file_name,".gz",3);
+	strncpy(compressed_file_name,file_name,file_name_l-4);
+	strncat(compressed_file_name,".gz",4);
 	uint8_t *deflated_stream = NULL;
 	long long comp_size = deflate(stream,stream_size,&deflated_stream);
 	if(comp_size == -1) return -1;
 
-	crc32_init();
-	uint32_t c32 = crc32(stream,stream_size);
-
 
 	struct Gzip_h h;
+	gzip_header_init(&h);
 	uint8_t h_buf[12] = {0};
-	int offset = gzip_header_init(h,h_buf);
+	int offset = write_gzip_header(&h,h_buf);
 
-	int file_name_l = (int)strlen(file_name)+1;
-	long allocate_mem = offset + file_name_l + comp_size + 8;
-	uint8_t *writable_out = malloc(offset+file_name_s+comp_size+8);
+	long allocate_mem = offset + file_name_l+1 + comp_size + 8;
+	uint8_t *writable_out = malloc(allocate_mem);
 	if(!writable_out){
 		free(deflated_stream);
 		return -1;
@@ -1134,8 +1136,8 @@ int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
 	memcpy(&writable_out[bwritten],h_buf,offset);
 	bwritten += offset;
 
-	memcpy(&writable_out[bwritten],file_name,file_name_l - 1);
-	bwritten += file_name_l;
+	memcpy(&writable_out[bwritten],file_name,file_name_l);
+	bwritten += file_name_l + 1;
 	
 	memcpy(&writable_out[bwritten],deflated_stream,comp_size);
 	bwritten += comp_size;
@@ -1143,34 +1145,25 @@ int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
 	crc32_init();
 	uint32_t c32 = crc32(stream,stream_size);
 
-	writable_out[bwritten++] = crc32 | 0xFF; 
-	writable_out[bwritten++] = (crc32 >> 8) | 0xFF; 
-	writable_out[bwritten++] = (crc32 >> 16) | 0xFF; 
-	writable_out[bwritten++] = (crc32 >> 24 )| 0xFF; 
+	writable_out[bwritten++] = (uint8_t) (c32); 
+	writable_out[bwritten++] = (uint8_t) (c32 >> 8); 
+	writable_out[bwritten++] = (uint8_t) (c32 >> 16); 
+	writable_out[bwritten++] = (uint8_t) (c32 >> 24); 
 
 	uint32_t size = (uint32_t) stream_size;
-	writable_out[bwritten++] = 	size | 0xFF; 
-	writable_out[bwritten++] = 	(size >> 8)  | 0xFF; 
-	writable_out[bwritten++] = 	(size >> 16) | 0xFF; 
-	writable_out[bwritten] = 	(size >> 24) | 0xFF; 
+	writable_out[bwritten++] = 	(uint8_t)(size); 
+	writable_out[bwritten++] = 	(uint8_t)(size >> 8); 
+	writable_out[bwritten++] = 	(uint8_t)(size >> 16); 
+	writable_out[bwritten++] = 	(uint8_t)(size >> 24); 
 
-	FILE *fp = fopen(compressed_file_name,"w");
-	if(!fp){
-		free(deflated_stream);
-		free(writable_out);
-		return -1;
-	}
-
-	if(fwrite(writable_out,1,allocate_mem,fp) != allocate_mem) {
-		free(deflated_stream);
-		free(writable_out);
-		return -1;
-	}
+	int res = write_file(compressed_file_name,writable_out,bwritten);
 
 	free(deflated_stream);
 	free(writable_out);
+	if(res == -1) return -1;
 	return 0;
 }
+
 long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
 {
 	uint32_t crc32 = 0;
@@ -1207,5 +1200,5 @@ long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **infl
 long long unZIP(uint8_t *file_content, uint64_t file_size)
 {
 	if(walk_central_directory_ZIP(file_content,file_size,inflate) == -1) return -1;
-	return 0
+	return 0;
 }
