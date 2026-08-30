@@ -12,6 +12,9 @@
 	
 	char parent_dir[1024] = {0};
 #elif defined(_WIN32) || defined(_WIN64)
+	#ifndef UNICODE
+	#define UNICODE
+	#endif
 	#include <windows.h>
 	wchar_t parent_dir[1024] = {0};
 #endif
@@ -22,13 +25,13 @@ int change_dir(char* dir_name)
 	if(chdir(dir_name) == -1) return -1;
 #elif defined(_WIN32) || defined(_WIN64)
 	/*WINDOWS migth use wchar_t we need to convert the char * to wchar_t * */
-	mbstate_t ps = 0;
+	mbstate_t ps;
 	size_t l = strlen(dir_name);
 	wchar_t wstr[l+1];
 	wmemset(wstr,0,l+1);
 
 	size_t error = -1;
-    if(mbsnrtowcs(wstr,file_name,l,l,&ps) == -1) return -1;
+    if(mbsrtowcs(wstr,(const char** restrict)&dir_name,l,&ps) == -1) return -1;
 
 	if(!SetCurrentDirectory(wstr)) return -1;
 #endif
@@ -70,12 +73,12 @@ int create_folder(char *file_name)
 		}
 	}
 	/*WINDOWS migth use wchar_t we need to convert the char * to wchar_t * */
-	mbstate_t ps = 0;
+	mbstate_t ps;
 	size_t l = strlen(file_name);
 	wchar_t wstr[l+1];
 	wmemset(wstr,0,l+1);
 
-    if(mbsnrtowcs(wstr,file_name,l,l,&ps) == -1) return -1;
+    if(mbsrtowcs(wstr,(const char ** restrict)&file_name,l,&ps) == -1) return -1;
 
 	DWORD attr = GetFileAttributesW(wstr);
 	if(attr == INVALID_FILE_ATTRIBUTES){
