@@ -1167,7 +1167,7 @@ int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
 long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
 {
 	uint32_t crc32 = 0;
-	int32_t size_of_inflated = 0; 
+	uint32_t size_of_inflated = 0; 
 	long deflate_stream_offset = read_Gzip(file_content,file_size, &crc32,&size_of_inflated);
 	if(deflate_stream_offset == -1) return -1;
 

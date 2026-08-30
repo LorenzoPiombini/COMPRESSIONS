@@ -32,7 +32,7 @@ struct Hnode{
 
 struct Heap{
 	struct Hnode *nodes;
-	int32_t *idx; /*a pointer to the index array*/
+	uint32_t *idx; /*a pointer to the index array*/
 	int16_t size;
 };
 
