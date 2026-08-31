@@ -32,7 +32,6 @@ static int is_node_empty(struct Hnode *n);
 static int LZ77_binary(uint8_t *input, uint64_t input_size, struct LDpair **pairs);
 static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
-static long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
 static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t));
 static int build_file_path(char *file_name);
@@ -65,7 +64,6 @@ static int dynamic_tables(struct Bit_reader *r, struct Huffman *literal_h,struct
 static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n);
 static int decode_huffman(struct Bit_reader *r, struct Huffman *t);
 static int inflate_block(struct Bit_reader *r,uint8_t *out, uint64_t out_size,uint64_t *pos,struct Huffman *literal_h, struct Huffman *distance_h);
-static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size);
 
 /*-----------------------------------*/
 
@@ -91,10 +89,9 @@ static uint32_t crc32(const uint8_t *buf, uint64_t len)
         c = crc_table[(c ^ buf[i]) & 0xFF] ^ (c >> 8);
     return c ^ 0xFFFFFFFFu;
 }
-/*-------------- GZIP---------------------*/
-
 
 /*Compressions format*/
+/*-------------- GZIP---------------------*/
 struct Gzip_h{
 	uint8_t *extr_field;/*size declared in xlen*/ /*might not be written*/
 	uint32_t mtime;
@@ -108,6 +105,8 @@ struct Gzip_h{
 
 static void gzip_header_init(struct Gzip_h *h);
 static int write_gzip_header(struct Gzip_h *h, uint8_t *buf);
+static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size);
+static long read_Gzip_header(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize);
 
 static void gzip_header_init(struct Gzip_h *h)
 {
@@ -153,7 +152,7 @@ static int write_gzip_header(struct Gzip_h *h, uint8_t *buf)
 
 /*return the offset where the deflate stream starts
  * the caller has to compute the defalte stream size from there*/
-long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize)
+static long read_Gzip_header(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *isize)
 {
 	if(file_size < 18) return -1;
 	if(content[0] != 0x1f || content[1] != 0x8b || content[2] != 8) return -1;
@@ -182,7 +181,7 @@ long read_Gzip(uint8_t *content, uint64_t file_size, uint32_t *crc32, uint32_t *
 	 * ISIZE is reversed little endian*/
 
 	uint8_t *p = &content[file_size - 4];
-	*isize = *p | ((*(p + 1) << 8))| (*(p + 2 ) << 16) | ((uint32_t)*(p + 3)<< 24);
+	*isize = rd32(p);
 	*crc32 = content[file_size - 8];
 	return (long) off;
 }
@@ -370,6 +369,7 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 	return 0;
 }
 
+/*-----------------------------------------------------------*/
 static int flush(struct Bit_writer *w)
 {
 	while(w->nbits > 0){
@@ -1060,7 +1060,7 @@ clean_on_failure:
 	return -1;
 }
 
-static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size)
+long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size)
 {
 	struct Bit_reader r = {0,input_size,0,0,input};
 	uint64_t pos = 0;
@@ -1106,18 +1106,61 @@ static long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uin
 }
 
 
-int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
+int F_unGzip(char *file_name){
+	char *extension = NULL;
+	if((extension = strstr(file_name,".gz"))) extension--;		
+	if((extension = strstr(file_name,".tgz"))) extension--;		
+	if((extension = strstr(file_name,".gzip"))) extension--;		
+
+	char f_name[250] = {0};
+	strncpy(f_name,file_name,extension - file_name +1);
+
+	uint8_t *file_content = NULL;
+	long long size = read_file("lorem.txt",&file_content);
+	if(size == -1) return -1;
+
+	uint8_t *inflated_outup = NULL;
+	uint64_t inflated_outup_size = 0;
+	if(inflate_GZIP(file_content,size, &inflated_outup, &inflated_outup_size) == -1) goto failed;
+
+	free(file_content);
+	
+	if(write_file(f_name,inflated_outup, inflated_outup_size) == -1) goto failed;
+
+	free(inflated_outup);
+	return 0;
+
+failed:
+	if(inflated_outup) free(inflated_outup);
+	if(file_content) free(file_content);
+	return -1;
+
+
+}
+
+int F_Gzip(char *file_name)
 {
+	uint8_t *file_content = NULL;
+	long long size = read_file(file_name,&file_content);
+	if(size == -1) return -1;
+
 	int file_name_l = (int)strlen(file_name);
 	char compressed_file_name[file_name_l+4];
 	memset(compressed_file_name,0,file_name_l+4);
 
-	strncpy(compressed_file_name,file_name,file_name_l-4);
+	strncpy(compressed_file_name,file_name,file_name_l);
 	strncat(compressed_file_name,".gz",4);
-	uint8_t *deflated_stream = NULL;
-	long long comp_size = deflate(stream,stream_size,&deflated_stream);
-	if(comp_size == -1) return -1;
 
+	uint8_t *deflated_stream = NULL;
+	long long comp_size = deflate(file_content,size,&deflated_stream);
+	if(comp_size == -1){
+		free(file_content);
+		return -1;
+	}
+
+	crc32_init();
+	uint32_t c32 = crc32(file_content,size);
+	free(file_content);
 
 	struct Gzip_h h;
 	gzip_header_init(&h);
@@ -1142,15 +1185,12 @@ int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
 	memcpy(&writable_out[bwritten],deflated_stream,comp_size);
 	bwritten += comp_size;
 	
-	crc32_init();
-	uint32_t c32 = crc32(stream,stream_size);
 
 	writable_out[bwritten++] = (uint8_t) (c32); 
 	writable_out[bwritten++] = (uint8_t) (c32 >> 8); 
 	writable_out[bwritten++] = (uint8_t) (c32 >> 16); 
 	writable_out[bwritten++] = (uint8_t) (c32 >> 24); 
 
-	uint32_t size = (uint32_t) stream_size;
 	writable_out[bwritten++] = 	(uint8_t)(size); 
 	writable_out[bwritten++] = 	(uint8_t)(size >> 8); 
 	writable_out[bwritten++] = 	(uint8_t)(size >> 16); 
@@ -1164,11 +1204,11 @@ int Gzip_file(char *file_name, uint8_t *stream, uint64_t stream_size)
 	return 0;
 }
 
-long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
+static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
 {
-	uint32_t crc32 = 0;
+	uint32_t crc32_from_file = 0;
 	uint32_t size_of_inflated = 0; 
-	long deflate_stream_offset = read_Gzip(file_content,file_size, &crc32,&size_of_inflated);
+	long deflate_stream_offset = read_Gzip_header(file_content,file_size, &crc32_from_file,&size_of_inflated);
 	if(deflate_stream_offset == -1) return -1;
 
 	uint64_t deflate_size = file_size - 8 - deflate_stream_offset;
@@ -1186,7 +1226,24 @@ long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **infl
 	memset(input,0,deflate_size);
 	memcpy(input,&file_content[deflate_stream_offset],deflate_size);
 
-	if(inflate(input,deflate_size,*inflated_outup,size_of_inflated) == -1) {
+	long long res = 0;
+	if((res = inflate(input,deflate_size,*inflated_outup,size_of_inflated)) == -1) {
+		free(*inflated_outup);
+		*inflated_outup = NULL;
+		free(input);
+		return -1;
+	}
+
+	if(size_of_inflated != res){
+		free(*inflated_outup);
+		*inflated_outup = NULL;
+		free(input);
+		return -1;
+	}
+	crc32_init();
+	uint32_t c = crc32(*inflated_outup,size_of_inflated);
+
+	if(c != crc32_from_file){
 		free(*inflated_outup);
 		*inflated_outup = NULL;
 		free(input);
