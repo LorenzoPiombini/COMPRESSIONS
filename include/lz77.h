@@ -64,6 +64,5 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
 long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size);
 int F_unGzip(char *file_name);
 int F_Gzip(char *file_name);
-long long unGZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size);
 long long unZIP(uint8_t *file_content, uint64_t file_size);
 #endif
