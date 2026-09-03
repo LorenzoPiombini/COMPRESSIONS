@@ -12,7 +12,7 @@ static int test_ZIP(char *argv){
 	char *dir = strstr(argv,".");
 	if(!dir){
 		/*create a directory for the extraction*/
-		size_t l = strlen(argv);
+		int l = (int)strlen(argv);
 		if(l > 250) return -1;
 
 		d[0] = 'd';
@@ -61,14 +61,20 @@ failed:
 
 int main(int argc, char **argv){
 
-
-	if(F_Gzip("lorem.txt") == -1) return -1;
+	uint8_t *p = NULL;
+	if(F_Gzip("lorem.txt",-1,&p) == -1) return -1;
 
 	fprintf(stdout,"'%s' compressed!\n","lorem.txt");
-	return 0;
 
+	if(F_Gzip("lorem.txt",M_FILE,&p) == -1) return -1;
 	
+	free(p);
 	/*test_GZIP(argv[1]);*/
+	if(argc < 2){
+		printf("you gotta specify a file to zip!");
+		return -1;
+	}
+
 	if(argv[1])
 		test_ZIP(argv[1]);
 	return 0;

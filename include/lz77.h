@@ -12,6 +12,10 @@
 #define MAX_LIT_TREE ((286 * 2) -1)
 #define MAX_DIST_TREE ((30*2) - 1)
 
+
+/*change the behaviour of F_Gzip()*/
+#define M_FILE 300
+
 struct LZstate{
 	int32_t head[HASH_SIZE];
 	int32_t prev[WINDOW_SIZE];
@@ -59,10 +63,9 @@ struct Huffman{
 };
 
 
-
 long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
 long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size);
 int F_unGzip(char *file_name);
-int F_Gzip(char *file_name);
+int F_Gzip(char *file_name,int mode, uint8_t **buffer);
 long long unZIP(uint8_t *file_content, uint64_t file_size);
 #endif

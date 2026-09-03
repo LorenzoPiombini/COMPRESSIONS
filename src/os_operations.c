@@ -124,7 +124,7 @@ long long read_file(char *file_name, uint8_t **file_content)
 	}
 	
 	memset(*file_content,0,size);
-	if(fread(*file_content,1,size,fp) != size){
+	if((long long)fread(*file_content,1,size,fp) != size){
 		fclose(fp);
 		free(*file_content);
 		return -1;

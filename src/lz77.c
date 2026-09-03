@@ -28,13 +28,11 @@ static void insert(struct LZstate *state,uint8_t *p, uint64_t pos);
 static void gen_len_to_code_table(uint16_t *table);
 static uint8_t dist_code(uint32_t d);
 static uint16_t len_code(uint16_t l);
-static int is_node_empty(struct Hnode *n);
 static int LZ77_binary(uint8_t *input, uint64_t input_size, struct LDpair **pairs);
 static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
 static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t));
-static int build_file_path(char *file_name);
 
 
 /*---- Heap tree functions -----*/
@@ -124,7 +122,6 @@ static int write_gzip_header(struct Gzip_h *h, uint8_t *buf)
 {
 	if(h->magic == 0) return -1;
 
-	int bread = 0;
 	buf[0] = h->magic & 0xFF;
 	buf[1] = (h->magic >> 8) & 0xFF;
 	buf[2] = h->compression_method;
@@ -187,34 +184,6 @@ static long read_Gzip_header(uint8_t *content, uint64_t file_size, uint32_t *crc
 }
 
 /*-----------.ZIP----------------*/
-
-static int build_file_path(char *file_name)
-{
-	char fp_cpy[strlen(file_name)+1];
-	memset(fp_cpy,0,sizeof(fp_cpy));
-	strncpy(fp_cpy,file_name,sizeof(fp_cpy)-1);
-
-	char *dir = NULL;
-	char sub = '$';
-	while((dir = strstr(fp_cpy,PATH_OS))){
-		*dir = sub;
-		int end = dir - fp_cpy;
-		dir--;
-		while(dir != &fp_cpy[0] && *dir != sub) dir--;
-
-		if(*dir == sub) dir++;
-
-		int start = dir - fp_cpy;
-		int size = end - start + 1;
-		char d[size];
-		memset(d,0,size);
-		strncpy(d,dir,size-1);
-		if(create_folder(d) == -1) return -1;
-	}
-
-	return 0;
-
-}
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 {
 	/*0x0000FFFF is 2^16 - 1 (65,535) max comment size after EOCD in a .ZIP file*/
@@ -236,7 +205,7 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 {
 
 	/*allocating once 10Kib*/
-	int arena_size = 1024*10;
+	uint32_t arena_size = 1024*10;
 	uint8_t *inflated_data = malloc(arena_size);
 	if(!inflated_data) return -1;
 	memset(inflated_data,0,arena_size);
@@ -276,7 +245,7 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 			return -1;
 		}
 
-		uint32_t crc32 = 			rd32(cd_p + 16);
+		uint32_t crc32_on_file = 	rd32(cd_p + 16);
 		uint32_t compr_size = 		rd32(cd_p + 20);
 		uint32_t uncompr_size = 	rd32(cd_p + 24);
 		if(uncompr_size > arena_size){
@@ -345,22 +314,22 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 
 		}
 
-		/*WRITE THE FILE*/
-		FILE *fp = fopen(file_name,"w");
-		if(!fp){
+		crc32_init();
+		uint32_t crc32_verify = crc32(inflated_data,data_written);
+		if(crc32_verify != crc32_on_file){
 			free(inflated_data);
 			return -1;
 		}
 
+		/*WRITE THE FILE*/
 		long long size_to_write = (long long)((data_written != 0 ? data_written : uncompr_size));
-		if(fwrite(inflated_data,1,size_to_write,fp) != size_to_write){
-			fclose(fp);
+
+		if(write_file(file_name,inflated_data, size_to_write) == -1){
 			free(inflated_data);
 			return -1;
 		}
 
 		memset(inflated_data,0,arena_size); /*clear the memory each time instead of freeing it*/
-		fclose(fp);
 
 		/*set the pointer to the next central directory record*/
 		cd_p += (46 + file_name_l + comment_l + extra_field_l);
@@ -472,7 +441,9 @@ static int fixed_tables(struct Huffman *literal_h,struct Huffman *distance_h)
 	if(build_huffman_tables(literal_h,l,288) == -1) return -1;
 	memset(d,5,32);
 	if(build_huffman_tables(distance_h,d,32) == -1) return -1;
+	return 0;
 }
+
 static int build_huffman_tables(struct Huffman *t,uint8_t *len, int n)
 {
 	for(int i = 0; i < 16; i++) t->count[i] = 0;
@@ -1138,7 +1109,7 @@ failed:
 
 }
 
-int F_Gzip(char *file_name)
+int F_Gzip(char *file_name, int mode,uint8_t **buffer)
 {
 	uint8_t *file_content = NULL;
 	long long size = read_file(file_name,&file_content);
@@ -1196,11 +1167,17 @@ int F_Gzip(char *file_name)
 	writable_out[bwritten++] = 	(uint8_t)(size >> 16); 
 	writable_out[bwritten++] = 	(uint8_t)(size >> 24); 
 
-	int res = write_file(compressed_file_name,writable_out,bwritten);
+	if(mode == M_FILE){
+		int res = write_file(compressed_file_name,writable_out,bwritten);
+
+		free(deflated_stream);
+		free(writable_out);
+		if(res == -1) return -1;
+		return 0;
+	}
 
 	free(deflated_stream);
-	free(writable_out);
-	if(res == -1) return -1;
+	*buffer = writable_out;
 	return 0;
 }
 
