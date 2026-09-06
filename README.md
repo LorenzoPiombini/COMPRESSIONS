@@ -28,7 +28,7 @@ the function return -1 if it fails, or the size of the *deflated stream* if it i
 ```
 if no error are encountered, the caller has to free the result **df_in**.
 **inflate()** function, works in the same way.
-**F_Gzip()** will write a .gz file.
+**F_Gzip()** will write a compressed .gz file.
 **F_unGzip()** will write the decompressed file.
 
 
@@ -43,4 +43,5 @@ if no error are encountered, the caller has to free the result **df_in**.
 
 
 I wrote this, because I needed it in my web server [Wser](https://github.com/LorenzoPiombini/Wser),
+and in my excel data extractor [XLSC](https://github.com/LorenzoPiombini/XLSC),  
 it might not be useful or good for your use case.
