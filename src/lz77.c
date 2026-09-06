@@ -1245,8 +1245,33 @@ int unZIP(uint8_t *file_content, uint64_t file_size, struct F_unzip *d)
 													inflate,
 													&data)) == -1) return -1;
 
-	
 	d->size = uncomp_size;
 	d->data = data;
+	return 0;
+}
+
+int write_extracted_ZIP(struct F_unzip *d)
+{
+	if(!d->data) return -1;
+
+	uint64_t i = 0;
+	uint8_t *p = &d->data[0];
+	while(i < d->size){
+		char file_name[50] = {0};
+		
+		for(int j = 0; *p; file_name[j++] = *p++);
+		p++;
+
+		uint32_t file_size = rd32(p);
+		p += sizeof(file_size);
+
+		uint8_t data[file_size+1];
+		memset(data,0,file_size+1);
+		memcpy(data,p,file_size);
+		p += file_size;
+		i = (uint64_t)(p - &d->data[0]);
+		if(write_file(file_name,data, file_size) == -1) return -1;
+	}
+
 	return 0;
 }

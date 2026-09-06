@@ -19,6 +19,10 @@
 	wchar_t parent_dir[1024] = {0};
 #endif
 
+static int is_path_legal(const char *p);
+static int path_exist(const char *p);
+static int has_slash(const char *p,int *pos);
+
 int change_dir(char* dir_name)
 {
 #if defined(__linux__) || defined(__APPLE__)
@@ -52,16 +56,22 @@ int create_folder(char *file_name)
 		}
 	}
 
-	errno = 0;
-    if(mkdir(file_name, S_IRWXU | S_IFDIR ) == -1) {
-		if(errno == EEXIST){
-			errno = 0;
-			if(chdir(file_name) == -1) return -1;
-			return 0;
+	int slash_pos = 0;
+	if(has_slash(file_name,&slash_pos)){
+		char p[slash_pos+1];
+		memset(p,0,slash_pos+1);
+		strncpy(p,file_name,slash_pos);
+		errno = 0;
+    	if(mkdir(p, S_IRWXU | S_IFDIR ) == -1) {
+			if(errno != EEXIST) return -1;
 		}
-		return -1;
+		if(chdir(p) == -1) return -1;
+
+		char *s = file_name;
+		if(create_folder(s + slash_pos +1) == -1) return -1;
 	}
 
+	if(chdir(parent_dir) == -1) return -1;
 #elif defined(_WIN32) || defined(_WIN64)
 	if(!parent_dir[0]){
 		DWORD res = 0;
@@ -137,6 +147,10 @@ long long read_file(char *file_name, uint8_t **file_content)
 int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 {
 
+	if(!is_path_legal(compressed_file_name)) return -1;
+	if(!path_exist(compressed_file_name)){
+		if(create_folder(compressed_file_name) == -1) return -1;
+	}
 	FILE *fp = fopen(compressed_file_name,"wb");
 	if(!fp) return -1;
 
@@ -147,4 +161,40 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 
 	fclose(fp);
 	return 0;
+}
+
+static int is_path_legal(const char *p)
+{
+	char *l = (char*)p;
+	if(l[1] == '.') return 0;
+	if(l[0] == '/') return 0;
+	if(l[1] == ':') return 0;
+
+	return 1;
+}
+
+static int path_exist(const char *p)
+{
+	errno = 0;	
+	struct stat st;
+	if(stat(p,&st) == -1){
+		if(errno == ENOENT) return 0;
+	}
+
+	return 1;
+}
+
+static int has_slash(const char *p,int *pos)
+{
+	char *s = (char*)p;
+#if defined(__linux__) || defined(__APPLE__)
+	for(; *s && *s != '/'; s++);
+	*pos = (int)(s - p);
+	return *s == '/';
+#elif defined(_WIN32) || defined(_WIN64)
+	for(; *s && *s != '\\'; s++);
+	*pos = (int)(s - p);
+	return *s == '\\';
+#endif
+	
 }

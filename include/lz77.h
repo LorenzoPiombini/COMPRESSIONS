@@ -74,4 +74,5 @@ long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t o
 int F_unGzip(char *file_name);
 int F_Gzip(char *file_name,int mode, uint8_t **buffer);
 int unZIP(uint8_t *file_content, uint64_t file_size, struct F_unzip *d);
+int write_extracted_ZIP(struct F_unzip *d);
 #endif
