@@ -30,31 +30,19 @@ static int test_ZIP(char *argv){
 	}
 
 	uint8_t *file_content = NULL; 
-	FILE *fp = fopen(argv,"rb");
-	if(!fp)return -1;
-
-	if(fseek(fp,0,SEEK_END) == -1) goto failed;
-
 	long long size = 0;
-	if((size = ftell(fp)) == -1) goto failed;
+	if((size = read_file(argv,&file_content)) == -1) return -1;
 
-	rewind(fp);
-
-	file_content = malloc(size);
-	if(!file_content) goto failed;
-	if(fread(file_content,(size_t)size,1,fp) != 1) goto failed;
-
-	fclose(fp);
-	fp = NULL;
 	if(change_dir(d) == -1) return -1;
 
-	if(unZIP(file_content,size) == -1) goto failed;
+	struct F_unzip data  = {0};
+	if(unZIP(file_content,size,&data) == -1) goto failed;
 
 	free(file_content);
+	free(data.data);
 	return 0;
 
 failed:
-	if(fp) fclose(fp);
 	if(file_content) free(file_content);
 	return -1;
 }

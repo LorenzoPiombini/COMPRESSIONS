@@ -26,13 +26,17 @@ static uint16_t dist_to_code_rest[256];
 static uint32_t hash3(uint8_t *p);
 static void insert(struct LZstate *state,uint8_t *p, uint64_t pos);
 static void gen_len_to_code_table(uint16_t *table);
+static void gen_dist_to_code_tables();
 static uint8_t dist_code(uint32_t d);
 static uint16_t len_code(uint16_t l);
 static int LZ77_binary(uint8_t *input, uint64_t input_size, struct LDpair **pairs);
 static void find_match(struct LZstate *state,uint8_t* base,size_t bread,size_t remain, uint16_t *out_len, uint16_t *out_dist);
 static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_freq,uint32_t *dist_freq);
 static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size);
-static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t));
+static long walk_central_directory_ZIP(	uint8_t *file_content,
+										uint64_t file_size,
+										long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t),
+										uint8_t **uncomp_file_data);
 
 
 /*---- Heap tree functions -----*/
@@ -201,32 +205,36 @@ static long find_EOCD_ZIP(uint8_t *file_content, uint64_t file_size)
 	return -1;
 }
 
-static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t))
+/*
+ * UNZIP the file content in memory
+ * */
+static long walk_central_directory_ZIP(	uint8_t *file_content,
+										uint64_t file_size,
+										long long (*call_back_inflate)(uint8_t*,uint64_t,uint8_t*,uint64_t),
+										uint8_t **inflated_data)
 {
 
-	/*allocating once 10Kib*/
-	uint32_t arena_size = 1024*10;
-	uint8_t *inflated_data = malloc(arena_size);
-	if(!inflated_data) return -1;
-	memset(inflated_data,0,arena_size);
 
 	uint32_t central_directory_offset = 0;
 	uint16_t total_cd_records = 0;
 
 	long EOCD_offset = find_EOCD_ZIP(file_content,file_size);
-	if(EOCD_offset == -1){
-		free(inflated_data);
-		return -1;
-	}
+	if(EOCD_offset == -1) return -1;
 
 	const uint8_t *p = &file_content[EOCD_offset + 10];
 	total_cd_records = rd16(p);
+
+	uint64_t alloc_memory = 30*1024;
+	uint64_t bwritten = 0;
+	*inflated_data = malloc(alloc_memory);
+	if(!(*inflated_data)) return -1;
+	memset(*inflated_data,0,alloc_memory);
 
 	central_directory_offset = rd32(p + 6);
 
 	/*bound check*/
 	if(central_directory_offset >= file_size){
-		free(inflated_data);
+		free(*inflated_data);
 		return -1;
 	}
 
@@ -234,36 +242,23 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 	for(uint16_t j = 0; j < total_cd_records; j++){
 		/*check magic number*/
 		if(*cd_p != 0x50 || *(cd_p + 1) != 0x4B || *(cd_p + 2)  != 0x01 || *(cd_p + 3 ) != 0x02){
-			free(inflated_data);
+			free(*inflated_data);
 			return -1;
 		}
 
 
 		uint16_t comp_method =		rd16(cd_p + 10);
 		if(comp_method != 0 && comp_method != 8){
-			free(inflated_data);
+			free(*inflated_data);
 			return -1;
 		}
 
 		uint32_t crc32_on_file = 	rd32(cd_p + 16);
 		uint32_t compr_size = 		rd32(cd_p + 20);
 		uint32_t uncompr_size = 	rd32(cd_p + 24);
-		if(uncompr_size > arena_size){
-			/*realloc*/
-			
-			uint8_t *np = realloc(inflated_data,arena_size + uncompr_size);
-			if(!np){
-				free(inflated_data);
-				return -1;
-			}
-			fprintf(stdout,"reallocated from %d  to %d\n",arena_size, arena_size+uncompr_size);
-			inflated_data = np;
-			arena_size += uncompr_size;
-			memset(inflated_data,0,arena_size);
-		} 
 
 		if(comp_method == 0 && (compr_size != uncompr_size)){
-			free(inflated_data);
+			free(*inflated_data);
 			return -1;
 		}
 
@@ -274,12 +269,13 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 
 		if(file_pos > file_size) return -1;
 
-		/*MOVE TO THE LOCAL HEADER */
+		/*MOVE TO THE LOCAL HEADER*/
 		uint8_t *lh = &file_content[file_pos];
 		if(lh[0] != 0x50 || lh[1]  != 0x4B || lh[2] != 0x03 || lh[3] != 0x04){
-			free(inflated_data);
+			free(*inflated_data);
 			return -1;
 		}
+
 		/*skip the local header*/
 		uint16_t name_l = rd16(lh + 26);
 		uint16_t ef_size = rd16(lh + 28);
@@ -289,53 +285,62 @@ static long walk_central_directory_ZIP(uint8_t *file_content,uint64_t file_size,
 		char file_name[file_name_l+1];
 		/*bound check*/
 		if(((uint64_t)(cd_p - file_content) + 46) >= file_size) {
-			free(inflated_data);
+			free(*inflated_data);
 			return -1;
 		}
 
 		uint16_t i;
 		for(i = 0; i < file_name_l;i++){
 			file_name[i] = *(cd_p + 46 + i);
-			if(file_name[i] == '/') file_name[i] = '_';
 		}
 
 		file_name[i] = '\0';
 
+		if((bwritten + uncompr_size)>= alloc_memory){
+			/*realloc*/
+			
+			uint8_t *np = realloc(*inflated_data,alloc_memory * 2);
+			if(!np){
+				free(*inflated_data);
+				return -1;
+			}
+			*inflated_data = np;
+			memset(&(*inflated_data)[bwritten],0,(alloc_memory - bwritten) + alloc_memory);
+			alloc_memory *= 2;
+		} 
+
+		memcpy(&(*inflated_data)[bwritten],file_name,file_name_l+1);
+		bwritten += (file_name_l+1);
+
+		memcpy(&(*inflated_data)[bwritten],&uncompr_size,sizeof(uncompr_size));
+		bwritten += sizeof(uncompr_size);
+
 		long long data_written = 0;
 		if(comp_method == 0){
 			/*just copy the data*/
-			memcpy(inflated_data,data_stream,uncompr_size);
+			memcpy(&(*inflated_data)[bwritten],data_stream,uncompr_size);
+			data_written = uncompr_size;
 		}else{
-			data_written = call_back_inflate(data_stream,(uint64_t)compr_size,inflated_data,uncompr_size);
+			data_written = call_back_inflate(data_stream,(uint64_t)compr_size,&(*inflated_data)[bwritten],uncompr_size);
 			if(data_written == -1) {
-				free(inflated_data);
+				free(*inflated_data);
 				return -1;
 			}
 
 		}
 
 		crc32_init();
-		uint32_t crc32_verify = crc32(inflated_data,data_written);
+		uint32_t crc32_verify = crc32(&(*inflated_data)[bwritten],data_written);
 		if(crc32_verify != crc32_on_file){
-			free(inflated_data);
+			free(*inflated_data);
 			return -1;
 		}
 
-		/*WRITE THE FILE*/
-		long long size_to_write = (long long)((data_written != 0 ? data_written : uncompr_size));
-
-		if(write_file(file_name,inflated_data, size_to_write) == -1){
-			free(inflated_data);
-			return -1;
-		}
-
-		memset(inflated_data,0,arena_size); /*clear the memory each time instead of freeing it*/
-
+		bwritten += data_written;
 		/*set the pointer to the next central directory record*/
 		cd_p += (46 + file_name_l + comment_l + extra_field_l);
 	}
-	free(inflated_data);/*free only once*/
-	return 0;
+	return (long)bwritten;
 }
 
 /*-----------------------------------------------------------*/
@@ -669,7 +674,7 @@ static uint16_t len_code(uint16_t l)
 	return len_to_code[l];
 }
 
-static void gen_dist_to_code_tables(uint16_t *lo_table, uint16_t *hi_table)
+static void gen_dist_to_code_tables()
 {
 	for(int i = 0; i < 30; i++){
 		uint32_t hi = (i == 29) ? WINDOW_SIZE : distance_base[i+1] -1;	
@@ -1231,8 +1236,17 @@ static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t
 	return 0;
 }
 
-long long unZIP(uint8_t *file_content, uint64_t file_size)
+int unZIP(uint8_t *file_content, uint64_t file_size, struct F_unzip *d)
 {
-	if(walk_central_directory_ZIP(file_content,file_size,inflate) == -1) return -1;
+	long uncomp_size = 0;
+	uint8_t *data = NULL;
+	if((uncomp_size = walk_central_directory_ZIP(	file_content,
+													file_size,
+													inflate,
+													&data)) == -1) return -1;
+
+	
+	d->size = uncomp_size;
+	d->data = data;
 	return 0;
 }
