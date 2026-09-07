@@ -102,13 +102,6 @@ int create_folder(char *file_name)
 			return -1;
 		}
 	}
-	/*WINDOWS migth use wchar_t we need to convert the char * to wchar_t * */
-	mbstate_t ps;
-	size_t l = strlen(file_name);
-	wchar_t wstr[l+1];
-	wmemset(wstr,0,l+1);
-
-    if(mbsrtowcs(wstr,(const char ** restrict)&file_name,l,&ps) == -1) return -1;
 
 	int slash_pos = 0;
 	if(has_slash(file_name,&slash_pos)){
@@ -117,10 +110,11 @@ int create_folder(char *file_name)
 		strncpy(p,file_name,slash_pos);
 
 		mbstate_t ps;
-		wchar_t wstr[l+1];
-		wmemset(wstr,0,l+1);
+		wchar_t wstr[slash_pos+1];
+		wmemset(wstr,0,slash_pos+1);
 
-		if(mbsrtowcs(wstr,(const char ** restrict)&p,slash_pos,&ps) == -1) return -1;
+		char *pp = &p[0];
+		if(mbsrtowcs(wstr,(const char ** restrict)&pp,slash_pos+1,&ps) == -1) return -1;
 
 		if(!CreateDirectoryW(wstr,NULL)){
 			DWORD err = GetLastError();
@@ -236,14 +230,7 @@ static int path_exist(const char *p)
 static int has_slash(const char *p,int *pos)
 {
 	char *s = (char*)p;
-#if defined(__linux__) || defined(__APPLE__)
 	for(; *s && *s != '/'; s++);
 	*pos = (int)(s - p);
 	return *s == '/';
-#elif defined(_WIN32) || defined(_WIN64)
-	for(; *s && *s != '\\'; s++);
-	*pos = (int)(s - p);
-	return *s == '\\';
-#endif
-	
 }
