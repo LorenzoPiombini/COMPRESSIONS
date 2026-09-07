@@ -1308,6 +1308,8 @@ int browse_extracted_ZIP(char *file_name, struct F_unzip *d, uint8_t **file_stre
 			memcpy(*file_stream,p,file_size);
 			return file_size;
 		}
+		p += file_size;
+		i = (uint64_t)(p - &d->data[0]);
 	}
 	return -1;
 }
