@@ -21,14 +21,14 @@ static int test_ZIP(char *argv){
 		d[1] = '.';
 		int i = 2, j = 0;
 		while(j < l) d[i++] = argv[j++];
-		if(mkdir(d, S_IRWXU | S_IFDIR ) == -1) return -1;
+		if(make_dir(d) == -1) return -1;
 	}else{
 		int stop = dir - argv; 
 		d[0] = 'd';
 		d[1] = '.';
 		int i = 2, j = 0;
 		while(j < stop) d[i++] = argv[j++];
-		if(mkdir(d, S_IRWXU | S_IFDIR ) == -1) return -1;
+		if(make_dir(d) == -1) return -1;
 	}
 
 	uint8_t *file_content = NULL; 

@@ -8,6 +8,7 @@
 #endif
 
 #include <stdint.h>
+int make_dir(char * dir_name);
 int create_folder(char *file_name);
 int change_dir(char* dir_name);
 int write_file(char *compressed_file_name,uint8_t *data, uint64_t size);

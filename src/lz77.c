@@ -703,7 +703,7 @@ int debug_tb(){
 		if(len < lo || len > hi) printf("BAD len %d -> code %d\n", len, c);
 	}
 
-	gen_dist_to_code_tables(dist_to_code_low,dist_to_code_rest);
+	gen_dist_to_code_tables();
 	for(int dist = 1; dist <= 32768; dist++){
 		int c = dist_code(dist);
 		int lo = distance_base[c];
@@ -755,7 +755,7 @@ static void count_frequency(struct LDpair *pairs, uint64_t tokens,uint32_t *lit_
 
 
 	gen_len_to_code_table(len_to_code);
-	gen_dist_to_code_tables(dist_to_code_low,dist_to_code_rest);
+	gen_dist_to_code_tables();
 
 	for(uint64_t k = 0; k < tokens;k++){
 		if(pairs[k].length == 0){

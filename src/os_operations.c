@@ -41,7 +41,27 @@ int change_dir(char* dir_name)
 #endif
 	return 0;
 }
+int make_dir(char * dir_name)
+{
 
+#if defined(__linux__) || defined(__APPLE__)
+	if(mkdir(dir_name, S_IRWXU | S_IFDIR ) == -1) {
+		if(errno != EEXIST) return -1;
+	}
+#elif defined(_WIN32) || defined(_WIN64)
+	mbstate_t ps;
+	size_t l = strlen(dir_name);
+	wchar_t wstr[l+1];
+	wmemset(wstr,0,l+1);
+
+    if(mbsrtowcs(wstr,(const char ** restrict)&dir_name,l,&ps) == -1) return -1;
+
+	if(!CreateDirectoryW(wstr,NULL)) return -1;
+
+#endif
+	return 0;
+
+}
 int create_folder(char *file_name)
 {
 
@@ -75,7 +95,7 @@ int create_folder(char *file_name)
 #elif defined(_WIN32) || defined(_WIN64)
 	if(!parent_dir[0]){
 		DWORD res = 0;
-		if(!(res == GetCurrentDirectory(1024, parent_dir))){
+		if(!(res = GetCurrentDirectory(1024, parent_dir))){
 			if(res > 1024){
 				fprintf(stderr,"bigger buffer for directory path is needed.\n");
 			}
@@ -90,20 +110,30 @@ int create_folder(char *file_name)
 
     if(mbsrtowcs(wstr,(const char ** restrict)&file_name,l,&ps) == -1) return -1;
 
-	DWORD attr = GetFileAttributesW(wstr);
-	if(attr == INVALID_FILE_ATTRIBUTES){
-		DWORD err = GetLastError();
-		if(err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND){
-			if(!SetCurrentDirectory(wstr)){
-				return -1;
-			}
-			return 0;
+	int slash_pos = 0;
+	if(has_slash(file_name,&slash_pos)){
+		char p[slash_pos+1];
+		memset(p,0,slash_pos+1);
+		strncpy(p,file_name,slash_pos);
+
+		mbstate_t ps;
+		wchar_t wstr[l+1];
+		wmemset(wstr,0,l+1);
+
+		if(mbsrtowcs(wstr,(const char ** restrict)&p,slash_pos,&ps) == -1) return -1;
+
+		if(!CreateDirectoryW(wstr,NULL)){
+			DWORD err = GetLastError();
+			if(err != ERROR_ALREADY_EXISTS) return -1;
 		}
+
+		if(!SetCurrentDirectory(wstr)) return -1;
+
+		char *s = file_name;
+		if(create_folder(s + slash_pos +1) == -1) return -1;
 	}
 
-	if(!CreateDirectoryW(wstr,NULL)){ 
-			return -1;
-	}
+	if(!SetCurrentDirectory(parent_dir)) return -1;
 
 #endif
 	return 0;
@@ -175,11 +205,30 @@ static int is_path_legal(const char *p)
 
 static int path_exist(const char *p)
 {
+#if defined(__linux__) || defined(__APPLE__)
 	errno = 0;	
 	struct stat st;
 	if(stat(p,&st) == -1){
 		if(errno == ENOENT) return 0;
 	}
+#elif defined(_WIN32) || defined(_WIN64)
+	char *s = (char *)p;
+
+	mbstate_t ps;
+	size_t l = strlen(s);
+	wchar_t wstr[l+1];
+	wmemset(wstr,0,l+1);
+
+    if(mbsrtowcs(wstr,(const char ** restrict)&s,l,&ps) == -1) return -1;
+
+	DWORD attr = GetFileAttributesW(wstr);
+	if(attr == INVALID_FILE_ATTRIBUTES){
+		DWORD err = GetLastError();
+		if(err == ERROR_PATH_NOT_FOUND) return 0;
+		if(err == ERROR_FILE_NOT_FOUND) return 1;
+		return 0;
+	}
+#endif
 
 	return 1;
 }
