@@ -299,13 +299,13 @@ static long walk_central_directory_ZIP(	uint8_t *file_content,
 		if((bwritten + uncompr_size)>= alloc_memory){
 			/*realloc*/
 			
-			uint8_t *np = realloc(*inflated_data,alloc_memory * 2);
+			uint8_t *np = realloc(*inflated_data,alloc_memory +(bwritten + uncompr_size) + alloc_memory);
 			if(!np){
 				free(*inflated_data);
 				return -1;
 			}
 			*inflated_data = np;
-			memset(&(*inflated_data)[bwritten],0,(alloc_memory - bwritten) + alloc_memory);
+			memset(&(*inflated_data)[bwritten],0,(alloc_memory - bwritten) + uncompr_size + alloc_memory);
 			alloc_memory *= 2;
 		} 
 
@@ -1274,4 +1274,40 @@ int write_extracted_ZIP(struct F_unzip *d)
 	}
 
 	return 0;
+}
+
+int browse_extracted_ZIP(char *file_name, struct F_unzip *d, uint8_t **file_stream)
+{
+	if(!d->data) return -1;
+
+	uint64_t i = 0;
+	uint8_t *p = &d->data[0];
+	while(i < d->size){
+		char file_n[50] = {0};
+		
+		int j;
+		for(j = 0; (uint64_t)(p - &d->data[0]) < d->size && *p;file_n[j++] = *p++);
+		p++;
+
+		uint32_t file_size = rd32(p);
+		p += sizeof(file_size);
+
+		
+		if((int)strlen(file_name) != j){
+			p += file_size;
+			i = (uint64_t)(p - &d->data[0]);
+			continue;
+		}
+
+		if(strncmp(file_name,file_n,j) == 0){
+			/*allocate memory file stram*/
+			*file_stream = malloc(file_size+1);
+			if(!(*file_stream)) return -1;
+
+			memset(*file_stream,0,file_size+1);
+			memcpy(*file_stream,p,file_size);
+			return file_size;
+		}
+	}
+	return -1;
 }
