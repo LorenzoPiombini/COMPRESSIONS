@@ -59,8 +59,13 @@ int main(int argc, char **argv){
 	fprintf(stdout,"'%s' compressed!\n","lorem.txt");
 
 	if(F_Gzip("lorem.txt",M_FILE,&p) == -1) return -1;
-	
 	free(p);
+
+	
+	
+	uint8_t *deflated_stream = NULL;
+	long long comp_size = deflate("",0,&deflated_stream);
+
 	/*test_GZIP(argv[1]);*/
 	if(argc < 2){
 		printf("you gotta specify a file to zip!");
