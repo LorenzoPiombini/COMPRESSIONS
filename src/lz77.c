@@ -592,6 +592,7 @@ static void gen_codes(uint8_t *code_len, int16_t n, uint16_t *codes)
 static uint32_t heap_pop(struct Heap *h)
 {
 	uint32_t top = h->idx[0]; 
+	if(h->size == 0) return top;
 	h->idx[0] = h->idx[--h->size];
 	if(h->size) sift_heap_down(h,0);
 	return top;
