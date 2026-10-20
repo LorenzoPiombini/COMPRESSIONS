@@ -872,6 +872,8 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 	if(!input || input_size == 0) return 0; 
 	size_t pair_size = input_size / sizeof(struct LDpair);
 
+	if(pair_size == 0) return -1;/*this means that the size of the data that we want to deflate is too small*/
+
 	uint64_t *pairs = (uint64_t*)malloc(sizeof(uint64_t) + (sizeof(struct LDpair) *pair_size));
 	if(!pairs) return -1;
 

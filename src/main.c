@@ -64,7 +64,7 @@ int main(int argc, char **argv){
 	
 	
 	uint8_t *deflated_stream = NULL;
-	long long comp_size = deflate("",0,&deflated_stream);
+	long long comp_size = deflate("[]",2,&deflated_stream);
 
 	/*test_GZIP(argv[1]);*/
 	if(argc < 2){
