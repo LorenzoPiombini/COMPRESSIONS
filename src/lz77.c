@@ -69,6 +69,7 @@ static int inflate_block(struct Bit_reader *r,uint8_t *out, uint64_t out_size,ui
 
 /*-----------------------------------*/
 
+static uint8_t log2(uint32_t a);
 /* ===============COMPRESSION FILE FORMAT GZIP - ZIP ======================== */
 static uint32_t crc_table[256];
 static void crc32_init(void);
@@ -1118,7 +1119,7 @@ failed:
 
 }
 
-int F_Gzip(char *file_name, int mode,uint8_t **buffer)
+long long F_Gzip(char *file_name, int mode,uint8_t **buffer)
 {
 	uint8_t *file_content = NULL;
 	long long size = read_file(file_name,&file_content);
@@ -1187,7 +1188,7 @@ int F_Gzip(char *file_name, int mode,uint8_t **buffer)
 
 	free(deflated_stream);
 	*buffer = writable_out;
-	return 0;
+	return comp_size;
 }
 
 static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
@@ -1316,4 +1317,27 @@ int browse_extracted_ZIP(char *file_name, struct F_unzip *d, uint8_t **file_stre
 		i = (uint64_t)(p - &d->data[0]);
 	}
 	return -1;
+}
+
+static int zlib_header(struct Http_dflate *d)
+{
+	d->h.a |= (uint8_t)8;
+	d->h.a |= (uint8_t)(4 << (log2(WINDOW_SIZE) - 8));
+
+	return 0;	
+}
+static uint8_t log2(uint32_t a)
+{
+	uint8_t r = -1;
+	while(a > 0) {
+		a = a >> 1;
+		r++;
+	}
+	return r;
+}
+int http_dflate(struct Http_dflate *data, uint8_t **serialized)
+{
+	 zlib_header(data);
+	
+	return 0;
 }

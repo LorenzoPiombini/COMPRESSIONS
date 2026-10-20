@@ -69,10 +69,26 @@ struct F_unzip{
 	uint8_t *data;
 };
 
+struct Dflate{
+	uint8_t *buf;
+	uint64_t size;
+};
+
+struct Zlib_header{
+	uint8_t a;
+	uint8_t b;
+};
+
+struct Http_dflate{
+	struct Zlib_header h;
+	struct Dflate *d;
+	uint32_t alder32;
+};
+
 long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input);
 long long inflate(uint8_t *input, uint64_t input_size,uint8_t *output,uint64_t output_size);
 int F_unGzip(char *file_name);
-int F_Gzip(char *file_name,int mode, uint8_t **buffer);
+long long F_Gzip(char *file_name,int mode, uint8_t **buffer);
 int unZIP(uint8_t *file_content, uint64_t file_size, struct F_unzip *d);
 int write_extracted_ZIP(struct F_unzip *d);
 int browse_extracted_ZIP(char *file_name, struct F_unzip *d, uint8_t **file_stream);
