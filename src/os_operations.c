@@ -248,6 +248,7 @@ int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uin
 	int extension_size = strlen(gzip_extensions);
     int i = 0,found = 0;
     while((dir = readdir(s))){
+		if(dir->d_type == DT_DIR) continue;
         char *p,*extensions;
 		do{
 			p = extensions = &gzip_extensions[i];
@@ -255,6 +256,11 @@ int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uin
 			if(*(p - 1) == '.') *(p - 1) = '\000'; 
 			i++;
 			if(strstr(dir->d_name,extensions)){
+				char *c = dir->d_name;
+				while(*c && *c != '.') c++;
+				if(*c != '.') continue;
+				if(strlen(c+1) != strlen(extensions)) continue;
+				if(strncmp(c+1,extensions,strlen(extensions)) != 0) continue;
 				found++;
 				uint8_t *p = NULL;
 				if(gzip_callback(dir->d_name,M_FILE,&p) == -1) return -1;
@@ -271,8 +277,8 @@ int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uin
 		printf("%d files compressed\n",found);
 	else
 		printf("no files found to compress\n");
-	
-return 0;
+
+	return 0;
 
 
 }
