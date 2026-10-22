@@ -263,13 +263,17 @@ int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uin
 				if(strncmp(c+1,extensions,strlen(extensions)) != 0) continue;
 				found++;
 				uint8_t *p = NULL;
-				if(gzip_callback(dir->d_name,M_FILE,&p) == -1) return -1;
+				if(gzip_callback(dir->d_name,M_FILE,&p) == -1){
+					closedir(s);
+					return -1;
+				};
 				free(p);
 				break;
 			}
 		}while(i < extension_size);
 		i = 0;
 	}
+	closedir(s);
 #elif defined(_WIN32) || defined(_WIN64)
 
 #endif
