@@ -52,7 +52,7 @@ failed:
 }
 
 int main(int argc, char **argv){
-
+/*
 	uint8_t *p = NULL;
 	if(F_Gzip("lorem.txt",-1,&p) == -1) return -1;
 
@@ -65,7 +65,12 @@ int main(int argc, char **argv){
 	
 	uint8_t *deflated_stream = NULL;
 	long long comp_size = deflate("[]",2,&deflated_stream);
+*/
+	
+	long long (*gzip)(char*,int,uint8_t**) = F_Gzip;
 
+	char target[] = "html.css.js";
+	if(browse_dir(target, gzip) == -1) return -1;
 	/*test_GZIP(argv[1]);*/
 	if(argc < 2){
 		printf("you gotta specify a file to zip!");

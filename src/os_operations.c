@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "os_operations.h"
+#include "lz77.h"
 
 #if defined(__linux__) || defined(__APPLE__)
 	#include <sys/stat.h>
@@ -237,21 +238,41 @@ static int has_slash(const char *p,int *pos)
 	return *s == '/';
 }
 
-int browse_dir(char *gzip_extensions){
+int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uint8_t **) ){
 #if defined(__linux__) || defined(__APPLE__)
     if(!gzip_extensions) return -1;
     DIR *s;
-    struct dirent dir;
+    struct dirent *dir;
     if(!(s = opendir("."))) return -1;
 
-    int i = 0;
+	int extension_size = strlen(gzip_extensions);
+    int i = 0,found = 0;
     while((dir = readdir(s))){
-        char *p = &gzip_extensions[i];
-        while(*p && *p++ != ".") i++;
-    }
+        char *p,*extensions;
+		do{
+			p = extensions = &gzip_extensions[i];
+			while(*p && *p++ != '.') i++;
+			if(*(p - 1) == '.') *(p - 1) = '\000'; 
+			i++;
+			if(strstr(dir->d_name,extensions)){
+				found++;
+				uint8_t *p = NULL;
+				if(gzip_callback(dir->d_name,M_FILE,&p) == -1) return -1;
+				free(p);
+				break;
+			}
+		}while(i < extension_size);
+		i = 0;
+	}
 #elif defined(_WIN32) || defined(_WIN64)
 
 #endif
+	if(found) 
+		printf("%d files compressed\n",found);
+	else
+		printf("no files found to compress\n");
+	
+return 0;
 
 
 }
