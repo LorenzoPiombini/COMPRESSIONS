@@ -7,8 +7,10 @@
 
 #if defined(__linux__) || defined(__APPLE__)
 	#include <sys/stat.h>
+    #include <sys/types.h>
 	#include <errno.h>
 	#include <unistd.h>
+    #include <dirent.h>
 	
 	char parent_dir[1024] = {0};
 #elif defined(_WIN32) || defined(_WIN64)
@@ -233,4 +235,23 @@ static int has_slash(const char *p,int *pos)
 	for(; *s && *s != '/'; s++);
 	*pos = (int)(s - p);
 	return *s == '/';
+}
+
+int browse_dir(char *gzip_extensions){
+#if defined(__linux__) || defined(__APPLE__)
+    if(!gzip_extensions) return -1;
+    DIR *s;
+    struct dirent dir;
+    if(!(s = opendir("."))) return -1;
+
+    int i = 0;
+    while((dir = readdir(s))){
+        char *p = &gzip_extensions[i];
+        while(*p && *p++ != ".") i++;
+    }
+#elif defined(_WIN32) || defined(_WIN64)
+
+#endif
+
+
 }
