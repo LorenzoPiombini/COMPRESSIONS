@@ -13,6 +13,6 @@ int create_folder(char *file_name);
 int change_dir(char* dir_name);
 int write_file(char *compressed_file_name,uint8_t *data, uint64_t size);
 long long read_file(char *file_name, uint8_t **file_content);
-int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uint8_t **));
+int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uint8_t **,int)); 
 
 #endif

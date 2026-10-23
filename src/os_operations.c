@@ -238,7 +238,8 @@ static int has_slash(const char *p,int *pos)
 	return *s == '/';
 }
 
-int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uint8_t **) ){
+int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uint8_t **,int) ){
+	int found = 0;
 #if defined(__linux__) || defined(__APPLE__)
     if(!gzip_extensions) return -1;
     DIR *s;
@@ -246,24 +247,34 @@ int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uin
     if(!(s = opendir("."))) return -1;
 
 	int extension_size = strlen(gzip_extensions);
-    int i = 0,found = 0;
+    int i = 0;
     while((dir = readdir(s))){
 		if(dir->d_type == DT_DIR) continue;
         char *p,*extensions;
 		do{
 			p = extensions = &gzip_extensions[i];
-			while(*p && *p++ != '.') i++;
-			if(*(p - 1) == '.') *(p - 1) = '\000'; 
+			int j = 0;
+			while(*p && *p++ != '.') j++,i++;
+			char ex[j+1];
+			memset(ex,0,j+1);
+			strncpy(ex,extensions,j);
 			i++;
-			if(strstr(dir->d_name,extensions)){
+			if(strstr(dir->d_name,ex)){
 				char *c = dir->d_name;
+again:
 				while(*c && *c != '.') c++;
 				if(*c != '.') continue;
-				if(strlen(c+1) != strlen(extensions)) continue;
-				if(strncmp(c+1,extensions,strlen(extensions)) != 0) continue;
+				/*check for multiple dot*/
+				if(strstr(c + 1,".")){ 
+					c++;
+					goto again;
+				}
+
+				if(strlen(c+1) != strlen(ex)) continue;
+				if(strncmp(c+1,ex,strlen(ex)) != 0) continue;
 				found++;
 				uint8_t *p = NULL;
-				if(gzip_callback(dir->d_name,M_FILE,&p) == -1){
+				if(gzip_callback(dir->d_name,M_FILE,&p,1024) == -1){
 					closedir(s);
 					return -1;
 				};
@@ -283,6 +294,4 @@ int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uin
 		printf("no files found to compress\n");
 
 	return 0;
-
-
 }

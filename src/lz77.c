@@ -1119,7 +1119,7 @@ failed:
 
 }
 
-long long F_Gzip(char *file_name, int mode,uint8_t **buffer)
+long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit)
 {
 	if(mode != M_FILE)
 		if(!buffer) return -1;
@@ -1128,6 +1128,10 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer)
 	long long size = read_file(file_name,&file_content);
 	if(size == -1) return -1;
 
+	if(size <= limit) {
+		free(file_content);
+		return 0;
+	}
 	int file_name_l = (int)strlen(file_name);
 	char compressed_file_name[file_name_l+4];
 	memset(compressed_file_name,0,file_name_l+4);
