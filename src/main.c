@@ -67,6 +67,10 @@ int main(int argc, char **argv){
 	long long comp_size = deflate("[]",2,&deflated_stream);
 */
 	
+	uint8_t *p = NULL;
+	if(F_Gzip("test.crash",M_FILE,&p,0) == -1) return -1;
+	free(p);
+
 	long long (*gzip)(char*,int,uint8_t**,int) = F_Gzip;
 
 	char target[] = "html.css.js";
