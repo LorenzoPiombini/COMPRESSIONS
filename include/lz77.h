@@ -13,7 +13,12 @@
 #define MAX_DIST_TREE ((30*2) - 1)
 
 
-/*change the behaviour of F_Gzip()*/
+/* 
+	if present , change the behaviour of F_Gzip(), 
+	writes the gzipped file.
+	if not present, F_Gzip() 
+	populate the gzipped file in the argument output
+*/
 #define M_FILE 300
 
 struct LZstate{
