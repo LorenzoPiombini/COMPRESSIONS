@@ -68,9 +68,13 @@ int main(int argc, char **argv){
 */
 	
 	uint8_t *p = NULL;
+	if(F_Gzip("test.js",M_FILE,&p,0) == -1) return -1;
+	free(p);
+	p = NULL;
 	if(F_Gzip("test.crash",M_FILE,&p,0) == -1) return -1;
 	free(p);
 
+	return 0;
 	long long (*gzip)(char*,int,uint8_t**,int) = F_Gzip;
 
 	char target[] = "html.css.js";

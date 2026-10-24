@@ -905,11 +905,21 @@ long long deflate(uint8_t *input, uint64_t input_size,uint8_t **deflate_input)
 	int16_t root_d = build_tree(dist_freq,30,nd,&hd);
 
 	assign_depth(n,root_l,0,code_len);
-	if(root_d !=0) assign_depth(nd,root_d,0,code_len_dist);
+	int used = 0, last = -1;
+	for(int k=0; k < 30; k++){
+		if(dist_freq[k] == 0 ) continue;
+		used++;
+		last = k;	
+	}
 
-
+	if(used) assign_depth(nd,root_d,0,code_len_dist);
 	gen_codes(code_len,286,lit_codes);
-	if(root_d !=0)  gen_codes(code_len_dist,30,dist_codes);
+	if(used == 1){
+		code_len_dist[last] = 1;
+		code_len_dist[last == 0 ? 1: 0] = 1;
+	}
+	gen_codes(code_len_dist,30,dist_codes);
+	
 
 	struct Bit_writer w = {0};
 	w.buffer = malloc(1024*4); /*4 kib*/
