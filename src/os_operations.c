@@ -238,7 +238,8 @@ static int has_slash(const char *p,int *pos)
 	return *s == '/';
 }
 
-int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uint8_t **,int) ){
+
+int browse_dir(char *gzip_extensions, long long (*gzip_callback)(char *, int,uint8_t **,int,int) ){
 	int found = 0;
 #if defined(__linux__) || defined(__APPLE__)
     if(!gzip_extensions) return -1;
@@ -273,8 +274,15 @@ again:
 				if(strlen(c+1) != strlen(ex)) continue;
 				if(strncmp(c+1,ex,strlen(ex)) != 0) continue;
 				found++;
+
+                /*if compressing css or html or js files, we strip from '\n\t\r' */
+                int strp = 0;
+                if(strncmp(ex,"css",3) == 0
+                    || strncmp(ex,"html",4) == 0
+                    || strncmp(ex,"js",2) == 0 ) strp = 1;
+
 				uint8_t *p = NULL;
-				if(gzip_callback(dir->d_name,M_FILE,&p,1024) == -1){
+				if(gzip_callback(dir->d_name,M_FILE,&p,1024,strp) == -1){
 					closedir(s);
 					return -1;
 				};

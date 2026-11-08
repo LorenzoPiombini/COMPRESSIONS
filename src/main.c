@@ -67,26 +67,9 @@ int main(int argc, char **argv){
 	long long comp_size = deflate("[]",2,&deflated_stream);
 */
 	
-	uint8_t *p = NULL;
-	if(F_Gzip("test.js",M_FILE,&p,0) == -1) return -1;
-	free(p);
-	p = NULL;
-	if(F_Gzip("test.crash",M_FILE,&p,0) == -1) return -1;
-	free(p);
-
-	return 0;
-	long long (*gzip)(char*,int,uint8_t**,int) = F_Gzip;
 
 	char target[] = "html.css.js";
-	if(browse_dir(target, gzip) == -1) return -1;
+	if(browse_dir(target, F_Gzip) == -1) return -1;
 
-	/*test_GZIP(argv[1]);*/
-	if(argc < 2){
-		printf("you gotta specify a file to zip!");
-		return -1;
-	}
-
-	if(argv[1])
-		test_ZIP(argv[1]);
 	return 0;
 }
