@@ -5,9 +5,9 @@
 #include <time.h>
 #include "lz77.h"
 #include "os_operations.h"
+#include "buffer.h"
 
 
-static int strip_nt(uint64_t *buf);
 #define rd16(n) (((uint16_t)(n)[0]) | ((uint16_t)(n)[1] << 8)) 
 #define rd32(n) (((uint32_t)(n)[0]) | ((uint32_t)(n)[1] << 8) | ((uint32_t)(n)[2] << 16) | ((uint32_t)(n)[3] << 24)) 
 
@@ -1130,7 +1130,7 @@ failed:
 
 }
 
-long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int strip_file)
+long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit)
 {
 	if(mode != M_FILE)
 		if(!buffer) return -1;
@@ -1144,17 +1144,6 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int strip
 		return 0;
 	}
 
-    if(strip_file){
-       uint64_t buf = (uint64_t)file_content;
-       buf = buf | ((uint64_t)size << 48);
-       if(strip_nt(&buf) == -1){
-           free(file_content);
-           return 0;
-        }
-        file_content = (uint8_t *)(buf & 0x0000FFFFFFFFFFFF);
-        size = (long long)(((uint64_t) buf & 0xFFFF000000000000) >> 48);
-    }
-   
      
 	int file_name_l = (int)strlen(file_name);
 	char compressed_file_name[file_name_l+4];
@@ -1335,7 +1324,7 @@ int browse_extracted_ZIP(char *file_name, struct F_unzip *d, uint8_t **file_stre
 		}
 
 		if(strncmp(file_name,file_n,j) == 0){
-			/*allocate memory file stram*/
+			/*allocate memory file stream*/
 			*file_stream = malloc(file_size+1);
 			if(!(*file_stream)) return -1;
 
@@ -1372,29 +1361,3 @@ int http_dflate(struct Http_dflate *data, uint8_t **serialized)
 	return 0;
 }
 
-static int strip_nt(uint64_t *buf)
-{
-    size_t s = (size_t)((*buf & 0xFFFF000000000000) >> 48);
-    char *cpy_b = malloc(s + 1);
-    if(!cpy_b) return -1;
-    memset(cpy_b,0,s+1);
-
-    uint8_t* origin = (uint8_t*)(*buf & 0x0000FFFFFFFFFFFF);
-    size_t j = 0;
-    for(size_t i = 0; i < s;i++){
-        switch(origin[i]){
-        case '\n':
-        case '\t':
-        case '\r':
-            break;
-        default: 
-          cpy_b[j++] = origin[i]; 
-        }
-    }   
-   
-    free(origin);
-    
-    *buf = (uint64_t)cpy_b; 
-    *buf = *buf | (uint64_t)((uint64_t)j << 48 ); 
-    return 0;
-}

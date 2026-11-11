@@ -277,9 +277,11 @@ again:
 
                 /*if compressing css or html or js files, we strip from '\n\t\r' */
                 int strp = 0;
+                /*
                 if(strncmp(ex,"css",3) == 0
                     || strncmp(ex,"html",4) == 0
                     || strncmp(ex,"js",2) == 0 ) strp = 1;
+*/
 
 				uint8_t *p = NULL;
 				if(gzip_callback(dir->d_name,M_FILE,&p,1024,strp) == -1){

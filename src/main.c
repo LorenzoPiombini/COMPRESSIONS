@@ -6,6 +6,7 @@
 #include <string.h>
 #include "lz77.h"
 #include "os_operations.h"
+#include "buffer.h"
 
 static int test_ZIP(char *argv){
 
@@ -68,8 +69,25 @@ int main(int argc, char **argv){
 */
 	
 
-	char target[] = "html.css.js";
-	if(browse_dir(target, F_Gzip) == -1) return -1;
+    
+	//char target[] = "html.css.js";
+	//if(browse_dir(target, F_Gzip) == -1) return -1;
 
+    uint8_t *file_content = NULL;
+   long long  s = read_file("index.html", &file_content);
+    char *lc = NULL;
+    int size = 0, count = 0;
+    uint8_t *start = file_content;
+    while(file_content - start < s 
+            && (size = get_line((char *)file_content,&lc)) != EOF){
+            HTML_parse_line(lc);
+            if(strstr(lc,"\n")) count++;
+            printf("%*s",size,lc);
+            file_content += size;
+    }
+
+    free(start);
+    buf_close();
+    fprintf(stdout,"found %d '\\n' after parsing\n",count);
 	return 0;
 }
