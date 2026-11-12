@@ -4,6 +4,7 @@
 #include "buffer.h"
 
 
+
 uint64_t line = 0;
 
 static int strip_nt(uint64_t *buf);
@@ -68,9 +69,22 @@ static int strip_nt(uint64_t *buf)
     }   
     for(size_t i = 0; i < s; i++) {
         if((s - i) > 1 && origin[i] == '\0'){
-            int len = strlen(&origin[i+1]);
-            memmove(&origin[i],&origin[i+1],s - (i + 1));
-            origin[s - ( i + 1)] = '\0';
+            size_t j = i;
+            while( j < s && origin[j] == '\0') j++;
+
+            /*the rest of the line is '\0' break out*/
+            if(j == s) break;
+
+            int len = strlen(&origin[j]);
+            int gap_to_fil = j - i;
+            int place_holder = (j + len) -1;
+            memmove(&origin[i],&origin[j],len);
+            /*zerod the gap*/
+            while(gap_to_fil > 0) {
+                origin[place_holder] = '\0';
+                gap_to_fil--;
+                place_holder--;
+            }
         }
     }
     
@@ -79,7 +93,6 @@ static int strip_nt(uint64_t *buf)
 
 static int HTML_comment(char *line, char **p)
 {
-    
     char *comment_start = strstr(line,"<!--");
     if(!comment_start) return -1;
     char *comment_end = strstr(line,"-->");
