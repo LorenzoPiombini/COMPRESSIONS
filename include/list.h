@@ -12,9 +12,9 @@ struct T {
 
 extern T    List_append     (T list, T tail);
 extern T    List_copy       (T list);
-extern T    List_list       (T list, ...);
+extern T    List_list       (void *x, ...);
 extern T    List_pop        (T list, void **x);
-extern T    List_push       (T list,void **x);
+extern T    List_push       (T list, void  *x);
 
 extern T    List_reverse    (T list);
 extern int  List_length     (T list);

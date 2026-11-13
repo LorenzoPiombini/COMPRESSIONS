@@ -23,6 +23,7 @@ int buf_handle_init()
     line = (uint64_t)l;
     return 0;    
 }
+
 void buf_close()
 {
     free((char *)(line & 0x0000FFFFFFFFFFFF));
@@ -87,7 +88,6 @@ static int strip_nt(uint64_t *buf)
             }
         }
     }
-    
     return 0;
 }
 
@@ -158,4 +158,25 @@ int HTML_parse_line(char *line)
     l = l | ((uint64_t)line_l << 48);
     strip_nt(&l);
     return 0;
+}
+
+Lines *line_push(Lines *l, line_T **el)
+{
+    Lines *ls = malloc(sizeof *l); 
+    if(!ls) return NULL;
+    memset(ls,0,sizeof *l);
+    
+    ls->first = *el;
+    ls->next = l;
+    return ls;
+}
+
+void line_free(Lines *l)
+{
+    Lines *next;
+    for(;l; l = next){
+        next = l->next;
+        free(l->first);
+        free(l);
+    }
 }

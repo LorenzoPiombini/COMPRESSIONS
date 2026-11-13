@@ -74,20 +74,40 @@ int main(int argc, char **argv){
 	//if(browse_dir(target, F_Gzip) == -1) return -1;
 
     uint8_t *file_content = NULL;
-   long long  s = read_file("index.html", &file_content);
+    long long  s = read_file("index.html", &file_content);
+
+    // init the buf_T
+    buf_T fb = { 0, NULL, s}; 
+    
+    
+    
     char *lc = NULL;
-    int size = 0, count = 0;
+    int size = 0;
     uint8_t *start = file_content;
     while(file_content - start < s 
             && (size = get_line((char *)file_content,&lc)) != EOF){
             HTML_parse_line(lc);
-            if(strstr(lc,"\n")) count++;
-            printf("%*s",size,lc);
+
+            line_T *l = malloc(sizeof *l);
+            if(!l) goto clean;
+
+            l->start = file_content; 
+            l->len = strlen(lc);
+            fb.line_nr++;
+            if((fb.ls = line_push(fb.ls,&l)) == NULL) goto clean;
+             
             file_content += size;
     }
 
+    line_free(fb.ls);
     free(start);
     buf_close();
-    fprintf(stdout,"found %d '\\n' after parsing\n",count);
+    printf("file has %ld lines\n",fb.line_nr);
 	return 0;
+
+clean:
+    line_free(fb.ls);
+    free(start);
+    buf_close();
+	return -1;
 }
