@@ -8,6 +8,12 @@
 uint64_t line = 0;
 
 static int strip_nt(uint64_t *buf);
+static void compact_str(char *str, size_t size);
+static int HTML_clear_white_space(char *str);
+static int HTML_comment(char *line, char **p);
+static int HTML_clear_white_space(char *str);
+static int HTML_tag_open(char *line);
+static int HTML_tag_close(char *line);
 
 #define MASK_ADDR 0x0000FFFFFFFFFFFF
 #define MASK_SIZE 0xFFFF000000000000
@@ -68,29 +74,35 @@ static int strip_nt(uint64_t *buf)
         default: 
         }
     }   
+    compact_str(origin,s);
+    return 0;
+}
+
+static void compact_str(char *str, size_t s)
+{
+
     for(size_t i = 0; i < s; i++) {
-        if((s - i) > 1 && origin[i] == '\0'){
+        if((s - i) > 1 && str[i] == '\0'){
             size_t j = i;
-            while( j < s && origin[j] == '\0') j++;
+            while( j < s && str[j] == '\0') j++;
 
             /*the rest of the line is '\0' break out*/
             if(j == s) break;
 
-            int len = strlen(&origin[j]);
+            int len = strlen(&str[j]);
             int gap_to_fil = j - i;
             int place_holder = (j + len) -1;
-            memmove(&origin[i],&origin[j],len);
+            memmove(&str[i],&str[j],len);
             /*zerod the gap*/
             while(gap_to_fil > 0) {
-                origin[place_holder] = '\0';
+                str[place_holder] = '\0';
                 gap_to_fil--;
                 place_holder--;
             }
         }
     }
-    return 0;
-}
 
+}
 static int HTML_comment(char *line, char **p)
 {
     char *comment_start = strstr(line,"<!--");
@@ -120,6 +132,7 @@ int HTML_parse_line(char *line)
 
     size_t line_l  = strlen(line);
     char *p = NULL;
+    HTML_clear_white_space(line);
     int comment_l = 0;
     if((comment_l = HTML_comment(line,&p)) > 0){
         /*erese the coment from the line*/
@@ -179,4 +192,56 @@ void line_free(Lines *l)
         free(l->first);
         free(l);
     }
+}
+
+static int HTML_clear_white_space(char *str)
+{
+# define bound_check ((s - i) > 1)
+    size_t s = strlen(str);
+    int string,p_tag,open_tag;
+    p_tag = string = open_tag = 0;
+
+    for(size_t i = 0; i < s; i++){
+        switch (str[i]) {
+        case '<':
+            if(bound_check && string == 0){
+                if(str[i+1] == '/'){ /*a tag is closing*/
+                    if(p_tag) p_tag = 0; 
+                    if(open_tag) open_tag = 0;
+                }else{
+                    open_tag = 1;
+                    if(str[i] == 'p') p_tag = open_tag;
+                }
+            }
+            break;     
+        case '\"': 
+            if(string) 
+                string = 0;
+            else
+                string = 1;
+            break;
+        case ' ':
+            if(string) break;
+            if(p_tag) break;
+            if(open_tag){
+                if(bound_check
+                    && (str[i+1] == '='
+                        || str[i+1] == '\"'
+                        || str[i+1] == '/')){
+                    str[i] = '\0';
+                    if(str[i+1] == '/' && open_tag) open_tag = 0;
+                    break;
+               }
+            }
+            if(bound_check
+                && (str[i+1] == ' '
+                    || str[i+1] == '<' )){
+                str[i] = '\0';
+            }
+            break;
+        default: break;
+        }
+    }
+#undef bound_check
+    compact_str(str,s);
 }

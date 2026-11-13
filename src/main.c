@@ -94,6 +94,7 @@ int main(int argc, char **argv){
             l->start = file_content; 
             l->len = strlen(lc);
             fb.line_nr++;
+            printf("%*s",l->len,lc);
             if((fb.ls = line_push(fb.ls,&l)) == NULL) goto clean;
              
             file_content += size;
