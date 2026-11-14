@@ -22,13 +22,13 @@ int get_line(char *buf,size_t buf_s, line_T* lc)
 {
     if(!buf) return EOF;
     if(*buf == '\0') return EOF;
+    if(buf_s == 0) return EOF;
 
 
     /*get the line from buf*/
     char *p = buf;
     while((p - buf) < buf_s && *p != '\n') p++;
     
-    if((p - buf) >= buf_s) return EOF;
     
     int line_len = p - buf;   
     /*include '\n'*/
