@@ -5,7 +5,6 @@
 
 
 
-uint64_t line = 0;
 
 static int strip_nt(char *str,size_t s);
 /*HTML parser helpers*/
@@ -14,10 +13,6 @@ static int HTML_comment(line_T *line, char **p);
 static int HTML_tag_open(char *line,size_t s);
 static int HTML_tag_close(char *line,size_t s);
 
-#define MASK_ADDR 0x0000FFFFFFFFFFFF
-#define MASK_SIZE 0xFFFF000000000000
-#define GET_SIZE(n) ((((uint64_t)n) & MASK_SIZE) >> 48)
-#define SET_SIZE(a,n) (a) = (a) | (((uint64_t)n) << 48)
 
 // buf is the buffer to extract the line from
 // lc is the line extracted 
