@@ -78,37 +78,22 @@ int main(int argc, char **argv){
 
     // init the buf_T
     buf_T fb = { 0, NULL, s}; 
-    
-    
-    
-    char *lc = NULL;
-    int size = 0;
+
+    line_T lc = {0};
     uint8_t *start = file_content;
     while(file_content - start < s 
-            && (size = get_line((char *)file_content,&lc)) != EOF){
-            HTML_parse_line(lc);
+            && get_line((char *)file_content,&lc) != EOF){
 
-            line_T *l = malloc(sizeof *l);
-            if(!l) goto clean;
-
-            l->start = file_content; 
-            l->len = strlen(lc);
-            fb.line_nr++;
-            printf("%*s",l->len,lc);
-            if((fb.ls = line_push(fb.ls,&l)) == NULL) goto clean;
-             
-            file_content += size;
+        HTML_parse_line(&lc);
+        file_content += lc.len;
     }
 
-    line_free(fb.ls);
+    compact_str(start,s);
+    printf("%*s",s,start);
+    printf("\nfile size before minimize:\t%ld\n",s);
+    printf("file size after minimize:\t%ld\n",strlen(start));
+    printf("gained %ld minimizing\n",s-strlen(start));
+    
     free(start);
-    buf_close();
-    printf("file has %ld lines\n",fb.line_nr);
-	return 0;
-
-clean:
-    line_free(fb.ls);
-    free(start);
-    buf_close();
-	return -1;
+    return 0;
 }

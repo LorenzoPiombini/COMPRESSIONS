@@ -28,11 +28,10 @@ struct file_buffer{
     size_t size; 
 };
 
-int buf_handle_init();
-int get_line(char *buf, char** lc);
-int HTML_parse_line(char *line);
+int get_line(char *buf, line_T *lc);
+int HTML_parse_line(line_T *line);
 Lines *line_push(Lines *l, line_T **el);
 void line_free(Lines *l);
-void buf_close();
+void compact_str(char *str, size_t size);
 
 #endif
