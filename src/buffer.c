@@ -9,7 +9,7 @@
 static int strip_nt(char *str,size_t s);
 /*HTML parser helpers*/
 static int HTML_clear_white_space(char *str,size_t s);
-static void HTML_comment(line_T *line);
+static void HTML_comment(line_T *line,int *multi_line_comment);
 static int HTML_tag_open(char *line,size_t s);
 static int HTML_tag_close(char *line,size_t s);
 
@@ -75,39 +75,62 @@ void compact_str(char *str, size_t s)
         }
     }
 }
-static void HTML_comment(line_T *line)
+static void HTML_comment(line_T *line,int *multi_line_comment)
 {
     char *comment_start, *comment_end;
     comment_end = comment_start = NULL;
     size_t i = 0; 
     size_t lo = strlen("<!--");
     size_t lc = strlen("-->");
-    while (i + lo < line->len) {
-        if(memcmp(&line->start[i], "<!--", lo) == 0) {
-            comment_start = &line->start[i];
-            i += lo;
-            break;
+    while(i <= line->len){
+        if(*multi_line_comment == 0){
+            while (i + lo <= line->len) {
+                if(memcmp(&line->start[i], "<!--", lo) == 0) {
+                    comment_start = &line->start[i];
+                    i += lo;
+                    break;
+                }
+                i++;
+            }
+
+
+            if(!comment_start) return;
         }
-        i++;
-    }
 
-    if(!comment_start) return;
-
-    while (i + lc < line->len) {
-        if(memcmp(&line->start[i], "-->", lc) == 0) {
-            comment_end = &line->start[i];
-            i += lc;
-            break;
+        while (i + lc <= line->len) {
+            if(memcmp(&line->start[i], "-->", lc) == 0) {
+                comment_end = &line->start[i];
+                i += lc;
+                break;
+            }
+            i++;
         }
-        i++;
+
+        if(!comment_end){
+            /*multi comment line*/
+            /*zeroed all line*/
+            if(*multi_line_comment){
+                memset(line->start,0,line->len);
+            }else if (comment_start) {
+                *multi_line_comment = 1;
+                memset(comment_start,0,line->len -(comment_start - line->start));
+            }
+            return;
+        }
+
+        if(*multi_line_comment) {
+            *multi_line_comment = 0;
+        }
+        /*account for --> size*/
+        comment_end += 3; 
+        i += 3;
+        if(i == line->len){
+            memset(comment_start,0,line->len);
+            return;
+        }
+        int comment_size = (int)((comment_end - line->start) - (comment_start - line->start));
+        memset(comment_start,0,comment_size);
     }
-
-    if(!comment_end) return;
-
-    /*account for --> size*/
-    comment_end += 3; 
-    int comment_size = (int)((comment_end - line->start) - (comment_start - line->start));
-    memset(comment_start,0,comment_size);
 }
 
 /*check if the line is a tag*/
@@ -127,11 +150,12 @@ static int HTML_tag_close(char *line, size_t s)
     return 0;
 }
 
-int HTML_parse_line(line_T *line)
+int HTML_parse_line(line_T *line,int *mlc)
 {
     HTML_clear_white_space(line->start,line->len);
-    HTML_comment(line);
-    
+    HTML_comment(line,mlc);
+    if(*mlc) return 0;
+
     /*full opening tag and in one line*/
     if(HTML_tag_open(line->start,line->len) && HTML_tag_close(line->start,line->len)){
         strip_nt(line->start,line->len);
@@ -143,7 +167,7 @@ int HTML_parse_line(line_T *line)
         strip_nt(line->start,line->len);
         return 0;
     }
-    
+
     /*closin openingin/closing tag*/
     if(!HTML_tag_open(line->start,line->len) && HTML_tag_close(line->start,line->len)){
         strip_nt(line->start,line->len);
@@ -159,7 +183,7 @@ Lines *line_push(Lines *l, line_T **el)
     Lines *ls = malloc(sizeof *l); 
     if(!ls) return NULL;
     memset(ls,0,sizeof *l);
-    
+
     ls->first = *el;
     ls->next = l;
     return ls;
@@ -184,56 +208,56 @@ static int HTML_clear_white_space(char *str,size_t s)
 
     for(size_t i = 0; i < s; i++){
         switch (str[i]) {
-        case '<':
-            if(bound_check && string == 0){
-                if(str[i+1] == '/'){ /*a tag is closing*/
-                    if(p_tag) p_tag = 0; 
-                    if(open_tag) open_tag = 0;
-                }else{
-                    open_tag = 1;
-                    if(str[i+1] == 'p') p_tag = open_tag;
-                }
-            }
-            break;     
-        case '\"': 
-            if(string) 
-                string = 0;
-            else
-                string = 1;
-            break;
-        case ' ':
-            if(string) break;
-            if(p_tag) break;
-            if(closing_tag){
-                if(str[i+1] == '>'){
-                    str[i] = '\0';
-                    closing_tag = 0;
-                }
-            }
-            if(open_tag){
-                if(bound_check
-                    && (str[i+1] == '='
-                        || str[i+1] == '\"'
-                        || str[i+1] == '/'
-                        || str[i+1] == '>')){
-                    str[i] = '\0';
-                    if(str[i+1] == '/'){
-                        open_tag = 0;
-                        closing_tag = 1;
+            case '<':
+                if(bound_check && string == 0){
+                    if(str[i+1] == '/'){ /*a tag is closing*/
+                        if(p_tag) p_tag = 0; 
+                        if(open_tag) open_tag = 0;
+                    }else{
+                        open_tag = 1;
+                        if(str[i+1] == 'p') p_tag = open_tag;
                     }
-              
-                    break;
-               }
-            }
-            if(bound_check
-                && (str[i+1] == ' '
-                    || str[i+1] == '<'
-                    || str[i+1] == '/'
-                    || str[i+1] == '>')){
-                str[i] = '\0';
-            }
-            break;
-        default: break;
+                }
+                break;     
+            case '\"': 
+                if(string) 
+                    string = 0;
+                else
+                    string = 1;
+                break;
+            case ' ':
+                if(string) break;
+                if(p_tag) break;
+                if(closing_tag){
+                    if(str[i+1] == '>'){
+                        str[i] = '\0';
+                        closing_tag = 0;
+                    }
+                }
+                if(open_tag){
+                    if(bound_check
+                            && (str[i+1] == '='
+                                || str[i+1] == '\"'
+                                || str[i+1] == '/'
+                                || str[i+1] == '>')){
+                        str[i] = '\0';
+                        if(str[i+1] == '/'){
+                            open_tag = 0;
+                            closing_tag = 1;
+                        }
+
+                        break;
+                    }
+                }
+                if(bound_check
+                        && (str[i+1] == ' '
+                            || str[i+1] == '<'
+                            || str[i+1] == '/'
+                            || str[i+1] == '>')){
+                    str[i] = '\0';
+                }
+                break;
+            default: break;
         }
     }
 #undef bound_check

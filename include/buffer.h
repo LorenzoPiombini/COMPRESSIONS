@@ -3,11 +3,6 @@
 
 #include <stdint.h> 
 
-extern uint64_t line;
-
-#define ALLOC_LINE_BUF  (uint16_t)0xFFFF
-#define LIMIT           (uint16_t)0xFFFF-1
-
 typedef struct file_buffer buf_T;
 typedef struct line line_T;
 typedef struct lines Lines;
@@ -29,7 +24,7 @@ struct file_buffer{
 };
 
 int get_line(char *buf,size_t buf_s, line_T* lc);
-int HTML_parse_line(line_T *line);
+int HTML_parse_line(line_T *line,int *mlc);
 Lines *line_push(Lines *l, line_T **el);
 void line_free(Lines *l);
 void compact_str(char *str, size_t size);
