@@ -82,24 +82,24 @@ static void HTML_comment(line_T *line)
     size_t i = 0; 
     size_t lo = strlen("<!--");
     size_t lc = strlen("-->");
-    while (i < line->len) {
+    while (i + lo < line->len) {
         if(memcmp(&line->start[i], "<!--", lo) == 0) {
             comment_start = &line->start[i];
             i += lo;
             break;
         }
-        i += lo;
+        i++;
     }
 
     if(!comment_start) return;
 
-    while (i < line->len) {
+    while (i + lc < line->len) {
         if(memcmp(&line->start[i], "-->", lc) == 0) {
             comment_end = &line->start[i];
             i += lc;
             break;
         }
-        i += lc;
+        i++;
     }
 
     if(!comment_end) return;
