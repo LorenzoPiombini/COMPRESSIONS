@@ -82,7 +82,8 @@ int main(int argc, char **argv){
     line_T lc = {0};
     uint8_t *start = file_content;
     while(file_content - start < s 
-            && get_line((char *)file_content,&lc) != EOF){
+            && get_line((char *)file_content,
+                s - (file_content - start),&lc) != EOF){
 
         HTML_parse_line(&lc);
         file_content += lc.len;

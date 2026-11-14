@@ -15,19 +15,22 @@ static int HTML_tag_close(char *line,size_t s);
 
 
 // buf is the buffer to extract the line from
+// buf_s is the buffer size 
 // lc is the line extracted 
 // return the size of each line
-int get_line(char *buf, line_T* lc)
+int get_line(char *buf,size_t buf_s, line_T* lc)
 {
     if(!buf) return EOF;
     if(*buf == '\0') return EOF;
 
 
     /*get the line from buf*/
-    char *end = strchr(buf,'\n');
-    if(!end) return EOF;
+    char *p = buf;
+    while((p - buf) < buf_s && *p != '\n') p++;
     
-    int line_len = end - buf;   
+    if((p - buf) >= buf_s) return EOF;
+    
+    int line_len = p - buf;   
     /*include '\n'*/
     line_len++;
 
