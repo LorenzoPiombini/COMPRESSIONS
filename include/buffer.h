@@ -28,7 +28,7 @@ struct file_buffer{
     size_t size; 
 };
 
-int get_line(char *buf, line_T *lc);
+int get_line(char *buf,size_t buf_s, line_T* lc);
 int HTML_parse_line(line_T *line);
 Lines *line_push(Lines *l, line_T **el);
 void line_free(Lines *l);
