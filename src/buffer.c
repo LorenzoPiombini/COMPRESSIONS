@@ -31,8 +31,8 @@ int get_line(char *buf,size_t buf_s, line_T* lc)
     
     
     int line_len = p - buf;   
-    /*include '\n'*/
-    line_len++;
+    /*include '\n' if found*/
+    if(p - buf < buf_s) line_len++;
 
     lc->start = buf;
     lc->len = line_len;
