@@ -9,7 +9,7 @@
 static int strip_nt(char *str,size_t s);
 /*HTML parser helpers*/
 static int HTML_clear_white_space(char *str,size_t s);
-static int HTML_comment(line_T *line, char **p);
+static void HTML_comment(line_T *line);
 static int HTML_tag_open(char *line,size_t s);
 static int HTML_tag_close(char *line,size_t s);
 
@@ -75,7 +75,7 @@ void compact_str(char *str, size_t s)
         }
     }
 }
-static int HTML_comment(line_T *line, char **p)
+static void HTML_comment(line_T *line)
 {
     char *comment_start, *comment_end;
     comment_end = comment_start = NULL;
@@ -91,7 +91,7 @@ static int HTML_comment(line_T *line, char **p)
         i += lo;
     }
 
-    if(!comment_start) return -1;
+    if(!comment_start) return;
 
     while (i < line->len) {
         if(memcmp(&line->start[i], "-->", lc) == 0) {
@@ -102,12 +102,12 @@ static int HTML_comment(line_T *line, char **p)
         i += lc;
     }
 
-    if(!comment_end) return -1;
+    if(!comment_end) return;
 
     /*account for --> size*/
     comment_end += 3; 
-    *p = comment_start;
-    return (int)((comment_end - line->start) - (comment_start - line->start));
+    int comment_size = (int)((comment_end - line->start) - (comment_start - line->start));
+    memset(comment_start,0,comment_size);
 }
 
 /*check if the line is a tag*/
@@ -129,17 +129,8 @@ static int HTML_tag_close(char *line, size_t s)
 
 int HTML_parse_line(line_T *line)
 {
-    char *p = NULL;
     HTML_clear_white_space(line->start,line->len);
-    int comment_l = 0;
-    if((comment_l = HTML_comment(line,&p)) > 0){
-        /*erese the coment from the line*/
-        memset(p,0,comment_l);
-        char *s = p;
-        /*consolidate the line*/
-        int size_left = line->len - ((p+comment_l)-line->start); 
-        memcpy(s,p + comment_l,size_left); 
-    }
+    HTML_comment(line);
     
     /*full opening tag and in one line*/
     if(HTML_tag_open(line->start,line->len) && HTML_tag_close(line->start,line->len)){
