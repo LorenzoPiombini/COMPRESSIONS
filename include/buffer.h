@@ -14,6 +14,7 @@
 #define SCRIPT_TAG_ONE_LINE     64U
 #define MULTI_P_TAG_OPEN        128U
 #define MULTI_PRE_TAG_OPEN      256U
+#define OPEN_TAG                512U
 
 #define IS_MULT_LINE_COMM(n)        (((n) & MULT_LINE_COMM) != 0)  
 #define IS_P_TAG_OPEN(n)            (((n) & P_TAG_OPEN)  != 0)
@@ -24,6 +25,7 @@
 #define IS_SCRIPT_TAG_ONE_LINE(n)   (((n) & SCRIPT_TAG_ONE_LINE) != 0)
 #define IS_MULTI_P_TAG_OPEN(n)      (((n) & MULTI_P_TAG_OPEN)  != 0)
 #define IS_MULTI_PRE_TAG_OPEN(n)    (((n) & MULTI_PRE_TAG_OPEN)  != 0)
+#define IS_OPEN_TAG(n)              (((n) & OPEN_TAG) != 0)
 
 #define SET_MULT_LINE_COMM(n)       ((n) |= MULT_LINE_COMM)
 #define SET_P_TAG_OPEN(n)           ((n) |= P_TAG_OPEN)
@@ -34,6 +36,8 @@
 #define SET_PRE_TAG_ONE_LINE(n)     ((n) |= PRE_TAG_ONE_LINE)
 #define SET_MULTI_P_TAG_OPEN(n)     ((n) |= MULTI_P_TAG_OPEN)
 #define SET_MULTI_PRE_TAG_OPEN(n)   ((n) |= MULTI_PRE_TAG_OPEN)
+#define SET_OPEN_TAG(n)             ((n) |= OPEN_TAG)
+
 
 #define UNSET_MULT_LINE_COMM(n)         ((n) &= ~MULT_LINE_COMM)
 #define UNSET_P_TAG_OPEN(n)             ((n) &= ~P_TAG_OPEN)
@@ -44,8 +48,8 @@
 #define UNSET_PRE_TAG_ONE_LINE(n)       ((n) &= ~PRE_TAG_ONE_LINE)
 #define UNSET_MULTI_PRE_TAG_OPEN(n)     ((n) &= ~MULTI_PRE_TAG_OPEN)
 #define UNSET_MULTI_P_TAG_OPEN(n)       ((n) &= ~MULTI_P_TAG_OPEN)
+#define UNSET_OPEN_TAG(n)               ((n) &= ~OPEN_TAG)
 
-typedef struct file_buffer buf_T;
 typedef struct line line_T;
 typedef struct lines Lines;
 
@@ -59,16 +63,8 @@ struct lines{
     Lines *next;
 };
 
-struct file_buffer{
-    long line_nr;
-    Lines *ls;  
-    size_t size; 
-};
-
 int get_line(char *buf,size_t buf_s, line_T* lc);
 int HTML_parse_line(line_T *line,uint32_t *flags);
-Lines *line_push(Lines *l, line_T **el);
-void line_free(Lines *l);
 void compact_str(char *str, size_t size);
 long long find_byte0(uint8_t* buf, size_t s);
 

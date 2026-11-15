@@ -19,8 +19,8 @@ static void HTML_comment(line_T *line,uint32_t *flags);
 int get_line(char *buf,size_t buf_s, line_T* lc)
 {
     if(!buf) return EOF;
-    if(*buf == '\0') return EOF;
     if(buf_s == 0) return EOF;
+    if(*buf == '\0') return EOF;
 
 
     /*get the line from buf*/
@@ -44,8 +44,7 @@ static int strip_nt(char *str,size_t s,uint32_t *flags)
         
         switch(str[i]){
         case '\n': case '\t': case '\r': 
-            if(IS_SCRIPT_TAG_OPEN(*flags))break;
-            if(IS_P_TAG_OPEN(*flags)){
+            if(IS_OPEN_TAG(*flags)){
                 str[i] = ' ';break;
             }else{
                 str[i] = '\0';break;
@@ -149,6 +148,7 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
         if (line[i] == '<' 
             && bound_check(1)
             && line[i+1] != '/'){
+            SET_OPEN_TAG(*flags);
             if(IS_PRE_TAG_OPEN(*flags) 
                 || IS_P_TAG_OPEN(*flags) 
                 || IS_MULTI_P_TAG_OPEN(*flags)
@@ -182,6 +182,7 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
             if( bound_check(1)
                 && (line[i] == '<' 
                     && line[i+1] == '/')){
+                    UNSET_OPEN_TAG(*flags);
                     if(bound_check(7)
                             && line[i+2] == 's' && line[i+3] == 'c'
                             && line[i+4] == 'r' && line[i+5] == 'i'
@@ -233,6 +234,8 @@ int HTML_parse_line(line_T *line,uint32_t *flags)
     
    
     HTML_check_tag(line->start,line->len,flags);
+    if(IS_PRE_TAG_OPEN(*flags)) return 0;
+
     if(IS_PRE_TAG_ONE_LINE(*flags)){
         UNSET_PRE_TAG_ONE_LINE(*flags);
         return 0;
@@ -241,11 +244,9 @@ int HTML_parse_line(line_T *line,uint32_t *flags)
         UNSET_SCRIPT_TAG_ONE_LINE(*flags);
         return 0;
     }
-    if(IS_PRE_TAG_OPEN(*flags)) return 0;
 
     strip_nt(line->start,line->len,flags);
 
-    if(IS_SCRIPT_TAG_OPEN(*flags))return 0;
 
     HTML_clear_white_space(line->start,line->len);
     return 0;
@@ -260,17 +261,6 @@ Lines *line_push(Lines *l, line_T **el)
     ls->first = *el;
     ls->next = l;
     return ls;
-}
-
-void line_free(Lines *l)
-{
-    Lines *next;
-    for(;l; l = next){
-        next = l->next;
-        free(l->first->start);
-        free(l->first);
-        free(l);
-    }
 }
 
 static int HTML_clear_white_space(char *str,size_t s)
