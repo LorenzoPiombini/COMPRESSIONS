@@ -164,7 +164,7 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
                 && line[i+3] == 'e'){
                 SET_PRE_TAG_OPEN(*flags);
             } 
-            if((s - i > 4) 
+            if((s - i > 6) 
                 && line[i+1] == 's' 
                 && line[i+2] == 'c'
                 && line[i+3] == 'r'
