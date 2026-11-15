@@ -192,8 +192,8 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
                     }
                     if(bound_check(4)
                         && line[i+2] == 'p'
-                        && line[i+3] == 'e'
-                        && line[i+4] == 'r'){
+                        && line[i+3] == 'r'
+                        && line[i+4] == 'e'){
                         if(IS_PRE_TAG_OPEN(*flags))         UNSET_PRE_TAG_OPEN(*flags);
                         if(IS_MULTI_PRE_TAG_OPEN(*flags))   UNSET_MULTI_PRE_TAG_OPEN(*flags);
                         if(IS_NESTED_TAG_OPEN(*flags))      UNSET_NESTED_TAG_OPEN(*flags);
