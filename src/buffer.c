@@ -9,9 +9,8 @@
 static int strip_nt(char *str,size_t s);
 /*HTML parser helpers*/
 static int HTML_clear_white_space(char *str,size_t s);
-static void HTML_comment(line_T *line,int *multi_line_comment);
-static int HTML_tag_open(char *line,size_t s);
-static int HTML_tag_close(char *line,size_t s);
+static int HTML_check_tag(char *line,size_t s,uint32_t *flags);
+static void HTML_comment(line_T *line,uint32_t *flags);
 
 
 // buf is the buffer to extract the line from
@@ -75,7 +74,7 @@ void compact_str(char *str, size_t s)
         }
     }
 }
-static void HTML_comment(line_T *line,int *multi_line_comment)
+static void HTML_comment(line_T *line,uint32_t *flags)
 {
     char *comment_start, *comment_end;
     comment_end = comment_start = NULL;
@@ -83,7 +82,7 @@ static void HTML_comment(line_T *line,int *multi_line_comment)
     size_t lo = strlen("<!--");
     size_t lc = strlen("-->");
     while(i <= line->len){
-        if(*multi_line_comment == 0){
+        if(IS_MULT_LINE_COMM(*flags) == 0){
             while (i + lo <= line->len) {
                 if(memcmp(&line->start[i], "<!--", lo) == 0) {
                     comment_start = &line->start[i];
@@ -108,17 +107,17 @@ static void HTML_comment(line_T *line,int *multi_line_comment)
         if(!comment_end){
             /*multi comment line*/
             /*zeroed all line*/
-            if(*multi_line_comment){
+            if(IS_MULT_LINE_COMM(*flags)){
                 memset(line->start,0,line->len);
             }else if (comment_start) {
-                *multi_line_comment = 1;
+                SET_MULT_LINE_COMM(*flags);
                 memset(comment_start,0,line->len -(comment_start - line->start));
             }
             return;
         }
 
-        if(*multi_line_comment) {
-            *multi_line_comment = 0;
+        if(IS_MULT_LINE_COMM(*flags)) {
+            UNSET_MULT_LINE_COMM(*flags);
         }
         /*account for --> size*/
         comment_end += 3; 
@@ -135,46 +134,69 @@ static void HTML_comment(line_T *line,int *multi_line_comment)
 }
 
 /*check if the line is a tag*/
-static int HTML_tag_open(char *line,size_t s)
+static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
 {
     for(size_t i = 0; i < s; i++) {
-        if (line[i] == '<') return 1;
+        if (line[i] == '<' 
+            && s - i > 1
+            && line[i+1] != '/'){
+            if(IS_PRE_TAG_OPEN(*flags) 
+                || IS_P_TAG_OPEN(*flags)
+                || IS_SCRIPT_TAG_OPEN(*flags)){
+                SET_NESTED_TAG_OPEN(*flags);
+            }
+            if((s - i > 2) 
+                && line[i+1] == 'p' 
+                && line[i+2] != 'r'){
+                SET_P_TAG_OPEN(*flags);
+            } 
+            if((s - i > 3) 
+                && line[i+1] == 'p' 
+                && line[i+2] == 'r'
+                && line[i+3] == 'e'){
+                SET_P_TAG_OPEN(*flags);
+            } 
+            if((s - i > 4) 
+                && line[i+1] == 's' 
+                && line[i+2] == 'c'
+                && line[i+3] == 'r'
+                && line[i+4] == 'i'
+                && line[i+5] == 'p'
+                && line[i+6] == 't'){
+                SET_SCRIPT_TAG_OPEN(*flags);
+            } 
+        } 
+            if((s-i > 1)
+                && line[i+1] == '/'){
+                if(IS_P_TAG_OPEN(*flags))       UNSET_P_TAG_OPEN(*flags);
+                if(IS_PRE_TAG_OPEN(*flags))     UNSET_PRE_TAG_OPEN(*flags);
+                if(IS_SCRIPT_TAG_OPEN(*flags))  UNSET_SCRIPT_TAG_OPEN(*flags);
+                if(IS_NESTED_TAG_OPEN(*flags))  UNSET_NESTED_TAG_OPEN(*flags);
+            }
     }
     return 0;
 }
 
-static int HTML_tag_close(char *line, size_t s)
+/*flags may cointain 32 flag*/
+int HTML_parse_line(line_T *line,uint32_t *flags)
 {
-    for(size_t i = 0; i < s; i++) {
-        if (line[i] == '>') return 1;
+    HTML_check_tag(line->start,line->len,flags);
+    if(IS_SCRIPT_TAG_OPEN(*flags)){
+        HTML_clear_white_space(line->start,line->len);
+        strip_nt(line->start,line->len);
+        return 0;
     }
-    return 0;
-}
-
-int HTML_parse_line(line_T *line,int *mlc)
-{
+    if(IS_P_TAG_OPEN(*flags)){
+        HTML_clear_white_space(line->start,line->len);
+        strip_nt(line->start,line->len);
+        return 0;
+    }
+    if(IS_PRE_TAG_OPEN(*flags)) return 0;
+         
     HTML_clear_white_space(line->start,line->len);
-    HTML_comment(line,mlc);
-    if(*mlc) return 0;
+    HTML_comment(line,flags);
+    if(IS_MULT_LINE_COMM(*flags)) return 0;
 
-    /*full opening tag and in one line*/
-    if(HTML_tag_open(line->start,line->len) && HTML_tag_close(line->start,line->len)){
-        strip_nt(line->start,line->len);
-        return 0;
-    }
-
-    /*tag is in more than one line*/
-    if(HTML_tag_open(line->start,line->len) && !HTML_tag_close(line->start,line->len)){
-        strip_nt(line->start,line->len);
-        return 0;
-    }
-
-    /*closin openingin/closing tag*/
-    if(!HTML_tag_open(line->start,line->len) && HTML_tag_close(line->start,line->len)){
-        strip_nt(line->start,line->len);
-        return 0;
-    }
-    /*a regular line*/
     strip_nt(line->start,line->len);
     return 0;
 }
