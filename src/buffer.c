@@ -144,13 +144,16 @@ static void HTML_comment(line_T *line,uint32_t *flags)
 /*check if the line is a tag*/
 static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
 {
+    int was_opened_scr = 0, was_opened_pre = 0;
     for(size_t i = 0; i < s; i++) {
         if (line[i] == '<' 
             && s - i > 1
             && line[i+1] != '/'){
             if(IS_PRE_TAG_OPEN(*flags) 
-                || IS_P_TAG_OPEN(*flags)
-                || IS_SCRIPT_TAG_OPEN(*flags)){
+                || IS_P_TAG_OPEN(*flags) 
+                || IS_MULTI_P_TAG_OPEN(*flags)
+                || IS_SCRIPT_TAG_OPEN(*flags) 
+                || IS_MULTI_PRE_TAG_OPEN(*flags)){
                 SET_NESTED_TAG_OPEN(*flags);
             }
             if((s - i > 2) 
@@ -163,6 +166,7 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
                 && line[i+2] == 'r'
                 && line[i+3] == 'e'){
                 SET_PRE_TAG_OPEN(*flags);
+                was_opened_pre = 1;
             } 
             if((s - i > 6) 
                 && line[i+1] == 's' 
@@ -172,17 +176,26 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
                 && line[i+5] == 'p'
                 && line[i+6] == 't'){
                 SET_SCRIPT_TAG_OPEN(*flags);
+                was_opened_scr = 1;
             } 
         } 
             if((s-i > 1)
                 && (line[i] == '<' 
                     && line[i+1] == '/')){
-                if(IS_P_TAG_OPEN(*flags))       UNSET_P_TAG_OPEN(*flags);
-                if(IS_PRE_TAG_OPEN(*flags))     UNSET_PRE_TAG_OPEN(*flags);
-                if(IS_SCRIPT_TAG_OPEN(*flags))  UNSET_SCRIPT_TAG_OPEN(*flags);
-                if(IS_NESTED_TAG_OPEN(*flags))  UNSET_NESTED_TAG_OPEN(*flags);
+                if(IS_MULTI_PRE_TAG_OPEN(*flags))   UNSET_MULTI_PRE_TAG_OPEN(*flags);
+                if(IS_MULTI_P_TAG_OPEN(*flags))     UNSET_MULTI_P_TAG_OPEN(*flags);
+                if(IS_P_TAG_OPEN(*flags))           UNSET_P_TAG_OPEN(*flags);
+                if(IS_PRE_TAG_OPEN(*flags))         UNSET_PRE_TAG_OPEN(*flags);
+                if(IS_SCRIPT_TAG_OPEN(*flags))      UNSET_SCRIPT_TAG_OPEN(*flags);
+                if(IS_NESTED_TAG_OPEN(*flags))      UNSET_NESTED_TAG_OPEN(*flags);
             }
     }
+   
+    
+    if(was_opened_scr
+        && !IS_SCRIPT_TAG_OPEN(*flags)) SET_SCRIPT_TAG_ONE_LINE(*flags);
+    if(was_opened_pre
+        && !IS_PRE_TAG_OPEN(*flags)) SET_PRE_TAG_ONE_LINE(*flags);
     return 0;
 }
 
@@ -193,12 +206,24 @@ int HTML_parse_line(line_T *line,uint32_t *flags)
     if(IS_MULT_LINE_COMM(*flags)) return 0;
 
     if(IS_PRE_TAG_OPEN(*flags) 
-        || IS_SCRIPT_TAG_OPEN(*flags)){
+        || IS_SCRIPT_TAG_OPEN(*flags)
+        || IS_MULTI_P_TAG_OPEN(*flags)
+        || IS_MULTI_PRE_TAG_OPEN(*flags)){
         HTML_check_tag(line->start,line->len,flags);
         return 0;
     }
 
+    
+   
     HTML_check_tag(line->start,line->len,flags);
+    if(IS_PRE_TAG_ONE_LINE(*flags)){
+        UNSET_PRE_TAG_ONE_LINE(*flags);
+        return 0;
+    }
+    if(IS_SCRIPT_TAG_ONE_LINE(*flags)){
+        UNSET_SCRIPT_TAG_ONE_LINE(*flags);
+        return 0;
+    }
     if(IS_PRE_TAG_OPEN(*flags)) return 0;
 
     strip_nt(line->start,line->len,flags);
