@@ -6,7 +6,7 @@
 
 
 
-static int strip_nt(char *str,size_t s);
+static int strip_nt(char *str,size_t s,uint32_t *flags);
 /*HTML parser helpers*/
 static int HTML_clear_white_space(char *str,size_t s);
 static int HTML_check_tag(char *line,size_t s,uint32_t *flags);
@@ -38,12 +38,20 @@ int get_line(char *buf,size_t buf_s, line_T* lc)
     return 0;
 }
 
-static int strip_nt(char *str,size_t s)
+static int strip_nt(char *str,size_t s,uint32_t *flags)
 {
     size_t j = 0;
     for(size_t i = 0; i < s;i++){
+        
         switch(str[i]){
-        case '\n': case '\t': case '\r': str[i] = '\0';break;
+        case '\n': case '\t': case '\r': 
+            if(IS_P_TAG_OPEN(*flags)
+                || IS_SCRIPT_TAG_OPEN(*flags)){
+                str[i] = ' ';break;
+            }else{
+                str[i] = '\0';break;
+            }
+            
         default: 
         }
     }   
@@ -154,7 +162,7 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
                 && line[i+1] == 'p' 
                 && line[i+2] == 'r'
                 && line[i+3] == 'e'){
-                SET_P_TAG_OPEN(*flags);
+                SET_PRE_TAG_OPEN(*flags);
             } 
             if((s - i > 4) 
                 && line[i+1] == 's' 
@@ -181,23 +189,9 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
 int HTML_parse_line(line_T *line,uint32_t *flags)
 {
     HTML_check_tag(line->start,line->len,flags);
-    if(IS_SCRIPT_TAG_OPEN(*flags)){
-        HTML_clear_white_space(line->start,line->len);
-        strip_nt(line->start,line->len);
-        return 0;
-    }
-    if(IS_P_TAG_OPEN(*flags)){
-        HTML_clear_white_space(line->start,line->len);
-        strip_nt(line->start,line->len);
-        return 0;
-    }
     if(IS_PRE_TAG_OPEN(*flags)) return 0;
-         
     HTML_clear_white_space(line->start,line->len);
-    HTML_comment(line,flags);
-    if(IS_MULT_LINE_COMM(*flags)) return 0;
-
-    strip_nt(line->start,line->len);
+    strip_nt(line->start,line->len,flags);
     return 0;
 }
 
