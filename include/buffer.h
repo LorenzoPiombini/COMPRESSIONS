@@ -41,7 +41,7 @@
 #define UNSET_SCRIPT_TAG_OPEN(n)        ((n) &= ~SCRIPT_TAG_OPEN)
 #define UNSET_NESTED_TAG_OPEN(n)        ((n) &= ~NESTED_TAG_OPEN)
 #define UNSET_SCRIPT_TAG_ONE_LINE(n)    ((n) &= ~SCRIPT_TAG_ONE_LINE)
-#define UNSET_PRE_TAG_ONE_LINE(n)       ((n) &= ~SCRIPT_TAG_ONE_LINE)
+#define UNSET_PRE_TAG_ONE_LINE(n)       ((n) &= ~PRE_TAG_ONE_LINE)
 #define UNSET_MULTI_PRE_TAG_OPEN(n)     ((n) &= ~MULTI_PRE_TAG_OPEN)
 #define UNSET_MULTI_P_TAG_OPEN(n)       ((n) &= ~MULTI_P_TAG_OPEN)
 
