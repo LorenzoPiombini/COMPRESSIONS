@@ -192,8 +192,13 @@ int HTML_parse_line(line_T *line,uint32_t *flags)
     HTML_comment(line,flags);
     if(IS_MULT_LINE_COMM(*flags)) return 0;
 
-    HTML_check_tag(line->start,line->len,flags);
+    if(IS_PRE_TAG_OPEN(*flags) 
+        || IS_SCRIPT_TAG_OPEN(*flags)){
+        HTML_check_tag(line->start,line->len,flags);
+        return 0;
+    }
 
+    HTML_check_tag(line->start,line->len,flags);
     if(IS_PRE_TAG_OPEN(*flags)) return 0;
 
     strip_nt(line->start,line->len,flags);
