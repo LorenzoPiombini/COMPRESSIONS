@@ -130,7 +130,8 @@ static void HTML_comment(line_T *line,int *multi_line_comment)
             int comment_size = (int)((comment_end - line->start) - (comment_start - line->start));
             memset(comment_start,0,comment_size);
         }
-        i++; 
+        comment_start = NULL;
+        comment_end = NULL;
    } 
 }
 
