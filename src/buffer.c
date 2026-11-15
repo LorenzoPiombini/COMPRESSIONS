@@ -93,7 +93,6 @@ static void HTML_comment(line_T *line,int *multi_line_comment)
                 i++;
             }
 
-
             if(!comment_start) return;
         }
 
@@ -123,14 +122,16 @@ static void HTML_comment(line_T *line,int *multi_line_comment)
         }
         /*account for --> size*/
         comment_end += 3; 
-        i += 3;
-        if(i == line->len){
-            memset(comment_start,0,line->len);
+        if(!comment_start){
+            int comment_size = (int)(comment_end - line->start);
+            memset(line->start,0,comment_size);
             return;
         }
-        int comment_size = (int)((comment_end - line->start) - (comment_start - line->start));
-        memset(comment_start,0,comment_size);
-    }
+    
+    int comment_size = (int)((comment_end - line->start) - (comment_start - line->start));
+    memset(comment_start,0,comment_size);
+    return;
+   } 
 }
 
 /*check if the line is a tag*/
