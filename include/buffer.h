@@ -28,5 +28,6 @@ int HTML_parse_line(line_T *line,int *mlc);
 Lines *line_push(Lines *l, line_T **el);
 void line_free(Lines *l);
 void compact_str(char *str, size_t size);
+long long find_byte0(uint8_t* buf, size_t s);
 
 #endif

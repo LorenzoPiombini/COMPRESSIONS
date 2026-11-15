@@ -264,3 +264,11 @@ static int HTML_clear_white_space(char *str,size_t s)
 #undef bound_check
     compact_str(str,s);
 }
+
+long long find_byte0(uint8_t *buf,size_t s)
+{
+    for(size_t i = 0; i < s; i++)
+        if(buf[i] == '\0') return (long long) i; 
+        
+    return -1;
+}

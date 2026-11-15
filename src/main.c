@@ -91,7 +91,12 @@ int main(int argc, char **argv){
     }
 
     compact_str(start,s);
-    printf("%*s",s,start);
+    long long minimized_sz = 0;
+    if((minimized_sz = find_byte0(start,s)) == -1){
+        printf("file was not minimized\n"); 
+        return 0;
+    }
+    printf("%*s",minimized_sz,start);
     printf("\nfile size before minimize:\t%ld\n",s);
     printf("file size after minimize:\t%ld\n",strlen(start));
     printf("gained %ld minimizing\n",s-strlen(start));
