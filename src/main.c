@@ -75,10 +75,7 @@ int main(int argc, char **argv){
 
     uint8_t *file_content = NULL;
     long long  s = read_file("index.html", &file_content);
-
-    // init the buf_T
-    buf_T fb = { 0, NULL, s}; 
-
+    
     line_T lc = {0};
     uint8_t *start = file_content;
     int mlc = 0;
@@ -94,9 +91,11 @@ int main(int argc, char **argv){
     long long minimized_sz = 0;
     if((minimized_sz = find_byte0(start,s)) == -1){
         printf("file was not minimized\n"); 
+        free(start);
         return 0;
     }
-    printf("%*s",minimized_sz,start);
+
+    fwrite(start,1,minimized_sz,stdout);
     printf("\nfile size before minimize:\t%ld\n",s);
     printf("file size after minimize:\t%ld\n",strlen(start));
     printf("gained %ld minimizing\n",s-strlen(start));

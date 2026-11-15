@@ -221,6 +221,7 @@ static int HTML_clear_white_space(char *str,size_t s)
                 }
                 break;     
             case '\"': 
+            case '\'': 
                 if(string) 
                     string = 0;
                 else
@@ -230,7 +231,7 @@ static int HTML_clear_white_space(char *str,size_t s)
                 if(string) break;
                 if(p_tag) break;
                 if(closing_tag){
-                    if(str[i+1] == '>'){
+                    if(bound_check && str[i+1] == '>'){
                         str[i] = '\0';
                         closing_tag = 0;
                     }
