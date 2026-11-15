@@ -188,10 +188,18 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
 /*flags may cointain 32 flag*/
 int HTML_parse_line(line_T *line,uint32_t *flags)
 {
-    HTML_clear_white_space(line->start,line->len);
+    HTML_comment(line,flags);
+    if(IS_MULT_LINE_COMM(*flags)) return 0;
+
     HTML_check_tag(line->start,line->len,flags);
+
     if(IS_PRE_TAG_OPEN(*flags)) return 0;
+
     strip_nt(line->start,line->len,flags);
+
+    if(IS_SCRIPT_TAG_OPEN(*flags))return 0;
+
+    HTML_clear_white_space(line->start,line->len);
     return 0;
 }
 
