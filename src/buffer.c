@@ -114,7 +114,9 @@ static void HTML_comment(line_T *line,int *multi_line_comment)
                 *multi_line_comment = 1;
                 memset(comment_start,0,line->len -(comment_start - line->start));
             }
-            return;
+            comment_start = NULL;
+            comment_end = NULL;
+            continue;
         }
 
         if(*multi_line_comment) {
