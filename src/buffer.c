@@ -45,8 +45,8 @@ static int strip_nt(char *str,size_t s,uint32_t *flags)
         
         switch(str[i]){
         case '\n': case '\t': case '\r': 
-            if(IS_P_TAG_OPEN(*flags)
-                || IS_SCRIPT_TAG_OPEN(*flags)){
+            if(IS_SCRIPT_TAG_OPEN(*flags))break;
+            if(IS_P_TAG_OPEN(*flags)){
                 str[i] = ' ';break;
             }else{
                 str[i] = '\0';break;
@@ -188,9 +188,9 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
 /*flags may cointain 32 flag*/
 int HTML_parse_line(line_T *line,uint32_t *flags)
 {
+    HTML_clear_white_space(line->start,line->len);
     HTML_check_tag(line->start,line->len,flags);
     if(IS_PRE_TAG_OPEN(*flags)) return 0;
-    HTML_clear_white_space(line->start,line->len);
     strip_nt(line->start,line->len,flags);
     return 0;
 }
@@ -220,8 +220,8 @@ void line_free(Lines *l)
 static int HTML_clear_white_space(char *str,size_t s)
 {
 # define bound_check ((s - i) > 1)
-    int string,p_tag,open_tag,closing_tag;
-    p_tag = string = open_tag = closing_tag = 0;
+    int string, was_s,was_d,p_tag,open_tag,closing_tag;
+    p_tag = string =was_d=was_s= open_tag = closing_tag = 0;
 
     for(size_t i = 0; i < s; i++){
         switch (str[i]) {
@@ -237,11 +237,26 @@ static int HTML_clear_white_space(char *str,size_t s)
                 }
                 break;     
             case '\"': 
-            case '\'': 
-                if(string) 
+            case '\'':
+                if((string && was_s) && str[i] == '\"') break;
+                if((string && was_d) && str[i] == '\"') {
                     string = 0;
-                else
+                    was_d = 0;
+                    break;
+                }
+                if((string && was_d) && str[i] == '\'') break;
+                if((string && was_s) && str[i] == '\'') {
+                    string = 0;
+                    was_s = 0;
+                    break;
+                }
+                if(string)
+                    string = 0;
+                else{
+                    if(str[i] == '\"') was_d = 1;
+                    if(str[i] == '\'') was_s = 1;
                     string = 1;
+                }
                 break;
             case ' ':
                 if(string) break;
