@@ -175,7 +175,8 @@ static int HTML_check_tag(char *line,size_t s,uint32_t *flags)
             } 
         } 
             if((s-i > 1)
-                && line[i+1] == '/'){
+                && (line[i] == '<' 
+                    && line[i+1] == '/')){
                 if(IS_P_TAG_OPEN(*flags))       UNSET_P_TAG_OPEN(*flags);
                 if(IS_PRE_TAG_OPEN(*flags))     UNSET_PRE_TAG_OPEN(*flags);
                 if(IS_SCRIPT_TAG_OPEN(*flags))  UNSET_SCRIPT_TAG_OPEN(*flags);
