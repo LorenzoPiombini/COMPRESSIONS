@@ -181,8 +181,8 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 		if(create_folder(compressed_file_name) == -1) return -1;
 	}
 #if defined(__linux__) || defined(__APPLE__)
-	int fd = open(compressed_file_name,O_WRONLY | O_TRUNC | O_NOFOLLOW);
-	if (!fd) return -1;
+	int fd = open(compressed_file_name,O_CREAT | O_WRONLY | O_NOFOLLOW | O_CLOEXEC,0700);
+	if (fd == -1) return -1;
 
 	ssize_t ss = 0;
 	if ((ss = write(fd,data,size)) == -1 ) {
@@ -197,13 +197,18 @@ repeat:
 			close(fd);
 			return -1;
 		}
-		if(ss + s < (ssize_t) size){
+
+		if(ss + s > 0
+			 && ss + s < (ssize_t) size){
 			ss += s;
 			goto repeat;
 		}
 	}
 
 	close(fd);
+#elif defined(_WIN32) || defined(_WIN64)
+
+#endif
 	return 0;
 }
 
