@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "os_operations.h"
 #include "lz77.h"
@@ -309,31 +311,10 @@ int del_file(char *file_name)
 {
 #if defined(__linux__) || defined(__APPLE__)
 	errno = 0;
-	if(unlink(file_name) == -1) {
-		if(errno == ENOENT)
-			return 0;
-		return -1;
-	}
+	if(unlink(file_name) || errno == ENOENT) return 0;
+	return -1;
 #elif defined(_WIN32) || defined(_WIN64)
 	/*TODO*/
 #endif
 	return 0;
-}
-
-int file_exist(char *file_name)
-{
-#if defined(__linux__) || defined(__APPLE__)
-	errno = 0;
-	int fd = open(file_name, O_CLOEXEC | O_NOFOLLOW | O_RDONLY);
-	if(fd == -1 && errno == ENOENT){
-		 return 0;
-	}
-
-	/*all the other errors, imply that we failed to open the file
-		but it exsist*/
-	if (fd > 0) close(fd);
-#elif defined(_WIN32) || defined(_WIN64)
-	/*TODO*/
-#endif
-	return 1;
 }

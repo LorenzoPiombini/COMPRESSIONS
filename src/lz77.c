@@ -1148,22 +1148,17 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 
 	if(size <= limit) {
 		free(file_content);
+		if(mode != M_FILE) return 0;
 		/*if .gz exist for this file then delete*/
-		if(file_exist(compressed_file_name)){
-			del_file(compressed_file_name);
-		}
-		return 0;
+		return del_file(compressed_file_name);
 	}
 
     if(min){
       file_content = HTML_minimize(file_content,(size_t*)&size); 
       if(size <= limit){
 		free(file_content);
-		/*if .gz exist for this file then delete*/
-		if(file_exist(compressed_file_name)){
-			del_file(compressed_file_name);
-		}
-		return 0;
+		if(mode != M_FILE) return 0;
+		return del_file(compressed_file_name);
       }
     }     
 
