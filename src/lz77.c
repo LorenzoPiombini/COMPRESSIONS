@@ -1213,7 +1213,7 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 
 	free(deflated_stream);
 	*buffer = writable_out;
-	return comp_size;
+	return bwritten;
 }
 
 static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
