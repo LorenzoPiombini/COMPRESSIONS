@@ -1,193 +1,185 @@
-# COMPRESSIONS review — precompressed assets for WSER
+# COMPRESSIONS — current issues
 
-Reviewed commit: `cef76d845bc1a59169882720d4464c49e66969ab` (`fix() browse_dir`).
-Baseline: the earlier report for `508e57a` in `BUG_REPORTS.md`.
+Reviewed commit: `91ae12f07ed94101ff0c7de26005823668b378f6`
+(`fix(): wrong size in memmode F_Gzip`).
 
-The intended path is **source `.html`/`.css`/`.js` → `browse_dir()` → `.gz`
-sidecars on disk → WSER serves those files**. Runtime compression is not required
-for this design. Findings below prioritize that path; other public API issues
-are separated. Production C sources were not changed by this review.
+This file intentionally lists only open findings. Resolved findings have been
+removed. The primary scope is the proposed WSER asset pipeline:
 
-Tests used GCC on Linux, ASan/UBSan, temporary fixtures and Python's independent
-`gzip.decompress()`. Native Windows/macOS and WSER's live HTTP selection,
-Content-Encoding, freshness checks and identity fallback were not tested.
-P1 means fix before relying on this asset pipeline; P2 means important correctness
-or portability work; P3 is lower-impact input validation.
+```text
+source .html/.css/.js -> browse_dir() -> .gz sidecar -> WSER
+```
 
-## What your changes fixed
+The current Linux behavior was checked with GCC, ASan/UBSan, temporary
+fixtures, GNU gzip, and byte-for-byte decompression comparisons. Windows and
+macOS were not tested. P1 means fix before running this pipeline automatically
+in production. P2 is important correctness or portability work. P3 is lower
+priority cleanup or documentation.
 
-| Earlier finding | Current result |
-| --- | --- |
-| Substring-only extension selection / gzip recompression | Fixed for the tested ordinary filenames: `index.html.gz`, `app.js.map`, `backup.html.old` and `htmlnotes.txt` are skipped. `main.min.js`, `site.v2.css`, `.hidden.js` and `index.html` are selected. Non-regular inputs remain a problem; see A4. |
-| Modifying the extension string | Fixed: parsing now uses a separate `ex` buffer. A literal `"html.css.js"` works repeatedly. |
-| Empty-list buffer underflow | The earlier `p[-1]` read is gone; ASan no longer reports it. Empty input still selects a trailing-dot filename; see B4. |
-| Directory handle leak | Fixed in the tested paths: 100 successful scans and 100 callback-failure scans work with a 32-descriptor limit. Real directories ending in `.js` are skipped. |
-| Windows `found` variable scope | Fixed at source level. Windows enumeration itself remains unimplemented; see A7. |
-| Empty/tiny inputs crashing the default batch | The new 1,024-byte threshold avoids these inputs in that batch. This is a skip policy, not a compressor fix; see A5 and B2. |
+## WSER precompressed-asset path
 
-## A. Findings affecting precompressed WSER assets
+### 1 — P1: Skipping a source can leave a stale `.gz` sidecar
 
-### A1 — P1: Some matching files still crash or produce invalid gzip
+**Location:** `src/lz77.c:1142–1152`, `src/os_operations.c:276–284`.
 
-**Location:** `src/lz77.c:559–567`, `720–755`, `904–908`.
+`F_Gzip()` returns success without touching the existing sidecar when the
+source is at or below the 1,024-byte limit. HTML can also become smaller than
+the limit after minimization and take the same path.
 
-**Reproduction:** A 2,100-byte file containing `console.log("hello");\n` repeated
-100 times passes the new threshold. `F_Gzip()` returns success and writes a
-72-byte gzip file, but Python rejects it with `invalid distance code`. A
-2,048-byte fixture with no repeated three-byte sequence crashes the **default
-batch** with an ASan-confirmed stack overflow in `assign_depth`. The companion
-runner generates that fixture deterministically. The six-byte `abcdef` case
-also still crashes when the threshold is disabled.
+This was reproduced by compressing a large `page.html`, replacing the source
+with `{}`, and running the scan again. `page.html.gz` still contained the old
+page. If WSER selects that sidecar, gzip-capable and identity clients can
+receive different versions of the resource.
 
-**Cause:** Distance Huffman trees with zero used symbols recurse through an
-uninitialized/empty root; a single used symbol receives depth zero and no usable
-distance code is emitted. File-size filtering cannot make these trees valid.
+**Required behavior:** Either generate a fresh sidecar for every selected
+source, or safely remove/invalidate the old sidecar when the source is skipped.
+Deleted sources also need sidecar cleanup, normally through a build manifest.
 
-**Suggested solution:** Handle zero/single-symbol alphabets explicitly when
-building and serializing dynamic trees. Use the RFC 1951 legal one-symbol
-representation and consistent HLIT/HDIST/code-length serialization, or fall back
-to a valid fixed/stored block. An empty stream still needs an end-of-block.
+**Regression check:** Build a sidecar, shrink the source below and exactly to
+the configured threshold, rebuild, and verify that there is either a fresh
+matching sidecar or no sidecar.
 
-**Regression check:** Independently decompress no-match, one-distance-symbol,
-repeated-byte and ordinary web assets, including files above 1 KB; compare every
-output byte with the source. A successful return alone is insufficient.
+### 2 — P1: Output replacement follows symlinks and is not atomic
 
-### A2 — P1: Shrinking a source below the threshold leaves a stale `.gz`
+**Location:** `src/os_operations.c:174–190` (`write_file`).
 
-**Location:** `src/lz77.c:1131–1134`; `src/os_operations.c:275–282`.
+The destination is opened directly with `fopen(path, "wb")`. An existing
+sidecar symlink is followed, so its target is overwritten. This was reproduced
+with `page.html.gz -> unrelated.txt`. The function also ignores the result of
+`fclose()`, so a final buffered-write failure can be reported as success after
+the old destination has already been truncated.
 
-**Reproduction:** Start with `page.html.gz` containing an older >1 KB source;
-replace `page.html` with `{}` and run the batch. It prints `1 files compressed`
-and exits successfully, but the gzip still decompresses to the old content.
+**Required behavior:** Write to an exclusively created temporary regular file
+in the destination directory, reject unsafe file types, check all write and
+close results, and atomically rename the completed file over the sidecar.
+Optionally sync the file and directory when crash durability is required.
 
-**Impact:** If WSER selects an existing sidecar without independently checking
-freshness, compressed clients receive the old page/script while identity clients
-receive the new source. That HTTP behavior is conditional, not a tested WSER claim.
+**Regression check:** Inject a final write/close failure and verify that the old
+sidecar survives. Place a symlink at the destination and verify that its target
+is unchanged.
 
-**Suggested solution:** Decide whether small files should have sidecars. To
-compress every match, remove/disable this size cutoff after fixing A1/B2. If
-skipping is intentional, explicitly invalidate an existing generated sidecar and
-have WSER fall back to the source. Publish source and sidecar changes as one
-asset-build result; do not leave a stale pair marked successful. A manifest can
-also remove generated sidecars for deleted sources.
+### 3 — P1: The scanner accepts FIFOs, symlinks, and other non-regular sources
 
-**Regression check:** Build, shrink a source below the cutoff, rebuild, and
-verify there is either a fresh matching gzip or no sidecar. Include the exactly
-1,024-byte boundary, which is skipped by `<=`.
+**Location:** `src/os_operations.c:139–171`, `src/os_operations.c:242–294`.
 
-### A3 — P1: Output writes can report false success or overwrite a link target
+The scanner excludes only entries reported as `DT_DIR`. A matching FIFO is
+passed to `F_Gzip()` and blocks in `fopen()`; the test process remained blocked
+until a two-second timeout. Matching symlinks are followed and can point outside
+the intended asset directory. `d_type` can also be `DT_UNKNOWN`, so it is not a
+complete type check.
 
-**Location:** `src/os_operations.c:173–191` (`write_file`).
+**Required behavior:** Open entries relative to the directory descriptor,
+reject symlinks according to an explicit policy, and verify with `fstatat()` or
+`fstat()` that each opened source is a regular file. Do not process FIFOs,
+sockets, devices, or directories.
 
-**Reproduction:** The first 2,048 bytes of `lorem.txt` normally produce a valid
-916-byte gzip. With `RLIMIT_FSIZE=0` and SIGXFSZ ignored, the buffered write reports
-success; the final flush fails, but `fclose()` is ignored, leaving a zero-byte
-output while `F_Gzip()` returns 0. Separately, an existing `page.html.gz` symlink
-to `unrelated.txt` causes that unrelated file to be replaced with gzip bytes.
-Both probes operate only on temporary files.
+**Regression check:** Verify that ordinary assets are processed while FIFOs,
+sockets, directories, and disallowed symlinks are skipped without blocking.
+Include a `DT_UNKNOWN` path.
 
-**Cause:** Direct `fopen(destination, "wb")` follows links/truncates existing
-outputs, and final buffered-write failures are discarded. A failed replacement
-can destroy the previous valid sidecar.
+### 4 — P2: Skipped files are counted as successfully compressed
 
-**Suggested solution:** Generate into an exclusively created temporary regular
-file in the destination directory. Check write, flush and close results; clean
-up and return an error on failure. Atomically rename a completed file into place
-so readers see a complete member and existing symlinks are replaced as directory
-entries rather than followed. If crash durability is required, also sync the file
-and destination directory. Do not deploy a failed source/sidecar build.
+**Location:** `src/os_operations.c:276–299`, `src/lz77.c:1142–1152`.
 
-**Regression check:** Inject flush failure and verify an error plus preservation
-of the previous output. Test an existing destination symlink and confirm its
-target remains unchanged.
+`found` is incremented before the callback runs. `F_Gzip()` returns `0` both
+when a disk sidecar is written and when the source is skipped by the size
+limit. A directory containing only a two-byte `page.html` therefore prints
+`1 files compressed` even though no sidecar was created. The 1,024-byte policy
+is also hardcoded in `browse_dir()`.
 
-### A4 — P2: Matching FIFOs and symlinks are treated as source files
+**Required behavior:** Give the callback distinct `COMPRESSED`, `SKIPPED`, and
+`ERROR` results. Count only completed outputs, report skips separately, and make
+the threshold configurable. This result contract should also drive the stale
+sidecar handling in issue 1.
 
-**Location:** `src/os_operations.c:251–252`, `275–277`.
+### 5 — P2: The asset CLI always scans the current directory
 
-**Reproduction:** The scan callback selects both `pipe.js` (a FIFO) and `link.js`
-(a symlink to a `.txt` file). The real batch hangs opening the FIFO; the review
-terminates it after two seconds. Skipping only `DT_DIR` does not establish that
-an entry is a regular file; `d_type` can also be `DT_UNKNOWN`.
+**Location:** `src/main.c:55–86`, `src/os_operations.c:248`.
 
-**Suggested solution:** Check actual file metadata, preferably relative to the
-opened directory descriptor using `fstatat`. Define a symlink policy explicitly:
-reject links, or deliberately resolve them and require a regular target within
-the asset root. Never pass FIFOs, sockets, devices or directories to the gzip
-callback. For concurrent/untrusted directories, open with appropriate no-follow
-and nonblocking protections, then validate the opened descriptor before reading.
+`main()` ignores its arguments and always runs `browse_dir()` against `.` with
+the hardcoded extension set `html.css.js`. This is not yet the explicit
+preparation command needed by WSER deployments.
 
-**Regression check:** Ordinary and multi-dot assets are selected; FIFO, socket,
-directory and disallowed symlink entries are skipped without blocking. Exercise
-a `DT_UNKNOWN` fallback rather than relying only on `dirent.d_type`.
+**Required behavior:** Provide a mode such as:
 
-### A5 — P2: The batch does not compress every match and counts skips as successes
+```text
+compressions assets DIRECTORY
+```
 
-**Location:** `src/os_operations.c:275–282`; `src/lz77.c:1131–1134`.
+Validate arguments before modifying files, expose the extension and size
+policies through deliberate options or configuration, and return nonzero when
+any required output fails.
 
-**Reproduction:** A directory containing only `page.html` with `{}` prints
-`1 files compressed`, returns 0 and creates no `page.html.gz`. The new callback
-passes a hardcoded limit of 1,024 bytes and increments `found` before it knows
-whether any output was created.
+### 6 — P2: Windows directory compression silently does nothing
 
-**Suggested solution:** Make the minimum-size policy configurable; default to
-compressing all matches if that is the intended contract. Distinguish
-`COMPRESSED`, `SKIPPED` and `ERROR` in the callback result and report separate
-counts. Clear output-pointer/length results on entry for memory mode. Document
-that skipped files require WSER identity fallback if that policy is retained.
-A counter change alone does not fix stale outputs in A2.
+**Location:** `src/os_operations.c:295–297`, `README.md:7`.
 
-**Regression check:** Mix a skipped small source, a successful large source and
-a failing source; verify accurate counts, output presence and a failing build
-status when a required asset could not be generated.
+The Windows branch of `browse_dir()` is empty and then reports success. This
+conflicts with the README claim that the program works on Windows as-is.
 
-### A6 — P2: The CLI mixes asset generation and ZIP extraction, with wrong exits
+**Required behavior:** Implement Windows enumeration with equivalent suffix,
+type, and close/error handling, or return an explicit unsupported-operation
+error and narrow the portability claim.
 
-**Location:** `src/main.c:70–83`.
+### 7 — P2: HTML minimization passes `long long` storage as `size_t *`
 
-**Reproduction:** Running the CLI with no arguments successfully creates a valid
-sidecar, then exits 255 with `you gotta specify a file to zip!`. Running it with
-`missing.zip` in an empty directory exits 0 despite the failed extraction,
-because `test_ZIP()`'s return is ignored.
+**Location:** `src/lz77.c:1138–1149`.
 
-**Suggested solution:** Separate commands, for example `assets [directory]` and
-`unzip archive.zip`. Validate the chosen command before modifying anything;
-return that operation's result. The assets command must not require a ZIP file.
+`size` is a `long long`, but its address is cast to `size_t *` for
+`HTML_minimize()`. Accessing the object through that incompatible type violates
+C aliasing rules and assumes the types have the same size and representation.
 
-**Regression check:** Successful assets-only generation exits 0; invalid usage,
-missing input and compression/extraction failures exit nonzero, with no unrelated
-operation executed.
+**Required behavior:** Range-check the file length, copy it into a real
+`size_t` variable, pass that variable to the minimizer, and convert back only
+when the API requires it.
 
-### A7 — P2: Windows directory compression silently does nothing
+### 8 — P3: The README documents an obsolete public API
 
-**Location:** `src/os_operations.c:288–296`.
+**Location:** `README.md:9–32`, `include/lz77.h:93–99`.
 
-**Evidence:** Source review: the `_WIN32`/`_WIN64` branch is empty, then returns 0
-and prints `no files found to compress`. Moving `found` fixed its earlier scope
-error, but did not implement scanning. No Windows toolchain/runtime was available
-to verify a complete Windows build.
+The README still shows `F_Gzip(char *file_name)`, while the implementation takes
+five parameters. It also does not document mode values, the skip result,
+ownership of the returned memory buffer, or that the return value in memory
+mode is the complete gzip length.
 
-**Suggested solution:** Implement enumeration with `FindFirstFileW` /
-`FindNextFileW`, equivalent suffix/type checks and guaranteed `FindClose`, including
-error paths. Until supported, return an explicit unsupported-operation failure
-and narrow the README's portability claim.
+**Required behavior:** Document the exact current prototypes and the ownership,
+length, skip, and error contracts before publishing a library package.
 
-**Regression check:** On Windows, generate and independently decode sidecars for
-matching files, skip non-matches/directories, and test Unicode names and failures.
+## Other current library safety issues
 
-## B. Other confirmed API/configuration issues
+### 9 — P1 when using decompression: Allocation failure checks and cleanup are invalid
 
-These are not prerequisites for a WSER path that only consumes valid on-disk
-sidecars, but remain library bugs or configuration traps.
+**Location:** `src/lz77.c:1227–1235` (`inflate_GZIP`).
 
-### B1 — P1 for memory callers: Returned gzip length excludes wrapper bytes
+After allocating `*inflated_outup`, the code checks `inflated_outup` instead of
+`*inflated_outup`. If allocation fails, execution can continue to `memset()` a
+null pointer. If the later input allocation fails, `free(inflated_outup)` frees
+the address of the caller's pointer rather than the allocated output buffer.
+GCC diagnoses the latter as freeing a non-heap object.
 
-**Location:** `src/lz77.c:1195–1197`.
+**Required behavior:** Check `*inflated_outup`, free `*inflated_outup` on later
+failure, set it to `NULL`, and leave output size zero on every failure path.
+Exercise allocation failures in regression tests.
 
-**Reproduction:** For the repository's `lorem.txt` copied to `page.html`, memory
-mode returns 5,103, but the complete member is 5,131 bytes. Decoding the returned
-length fails with premature EOF; decoding the full member succeeds.
+### 10 — P1 when using the list API: List nodes are under-allocated
 
-**Suggested solution:** Return `bwritten`, not the raw DEFLATE `comp_size`, with a
-clearly documented ownership/length contract. Test exact returned-length
+**Location:** `src/list.c:9–33`.
 
+`List_push()` and `List_list()` allocate `sizeof(T *)` or `sizeof(T)`, where
+`T` is already a pointer typedef. They then write a complete `struct List_T`,
+which is larger than the allocation on normal 64-bit targets. GCC reports both
+under-allocations. The asset path does not currently call this API, but any
+caller can trigger a heap buffer overflow.
+
+**Required behavior:** Allocate and clear `sizeof *p` in `List_push()` and
+`sizeof **p` in `List_list()`. Add push/list/pop tests under ASan.
+
+### 11 — P3: `HTML_clear_white_space()` has an incorrect return type
+
+**Location:** `src/buffer.c:264–342`.
+
+The function is declared to return `int` but reaches the end without returning
+a value. Its current caller ignores the result.
+
+**Required behavior:** Change it to `void`, or return and check a meaningful
+status consistently.
