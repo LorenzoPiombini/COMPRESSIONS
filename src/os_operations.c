@@ -181,7 +181,9 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 		if(create_folder(compressed_file_name) == -1) return -1;
 	}
 #if defined(__linux__) || defined(__APPLE__)
-	int fd = open(compressed_file_name,O_CREAT | O_WRONLY | O_NOFOLLOW | O_CLOEXEC,0700);
+	int fd = open( 	compressed_file_name,
+					O_CREAT | O_WRONLY | O_NOFOLLOW | O_CLOEXEC | O_TRUNC,
+					0700);
 	if (fd == -1) return -1;
 
 	ssize_t ss = 0;
