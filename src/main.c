@@ -70,36 +70,18 @@ int main(int argc, char **argv){
 	
 
     
-	//char target[] = "html.css.js";
-	//if(browse_dir(target, F_Gzip) == -1) return -1;
+	char target[] = "html.css.js";
+	if(browse_dir(target, F_Gzip) == -1) return -1;
 
-    uint8_t *file_content = NULL;
-    long long  s = read_file("index.html", &file_content);
     
-    line_T lc = {0};
-    uint8_t *start = file_content;
-    int mlc = 0;
-    while(file_content - start < s 
-            && get_line((char *)file_content,
-                s - (file_content - start),&lc) != EOF){
+#if 0
+	uint8_t *file_content = NULL;
+	long long size = read_file(argv[1],&file_content);
+	if(size == -1) return -1;
 
-        HTML_parse_line(&lc,&mlc);
-        file_content += lc.len;
-    }
-
-    compact_str(start,s);
-    long long minimized_sz = 0;
-    if((minimized_sz = find_byte0(start,s)) == -1){
-        printf("file was not minimized\n"); 
-        free(start);
-        return 0;
-    }
-
-    fwrite(start,1,minimized_sz,stdout);
-    printf("\nfile size before minimize:\t%ld\n",s);
-    printf("file size after minimize:\t%ld\n",strlen(start));
-    printf("gained %ld minimizing\n",s-strlen(start));
-    
-    free(start);
+    file_content= HTML_minimize(file_content,(size_t *)&size);
+    printf("%*s\n",(int)size,file_content);
+    free(file_content);
+#endif
     return 0;
 }

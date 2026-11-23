@@ -1130,7 +1130,7 @@ failed:
 
 }
 
-long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit)
+long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 {
 	if(mode != M_FILE)
 		if(!buffer) return -1;
@@ -1144,7 +1144,13 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit)
 		return 0;
 	}
 
-     
+    if(min){
+      file_content = HTML_minimize(file_content,(size_t*)&size); 
+      if(size <= limit){
+		free(file_content);
+		return 0;
+      }
+    }     
 	int file_name_l = (int)strlen(file_name);
 	char compressed_file_name[file_name_l+4];
 	memset(compressed_file_name,0,file_name_l+4);

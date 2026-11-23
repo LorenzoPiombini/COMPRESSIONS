@@ -50,22 +50,34 @@
 #define UNSET_MULTI_P_TAG_OPEN(n)       ((n) &= ~MULTI_P_TAG_OPEN)
 #define UNSET_OPEN_TAG(n)               ((n) &= ~OPEN_TAG)
 
+
+enum mode{
+    TEXT,
+    TAG,
+    COMMENT,
+    SCRIPT,
+    STYLE,
+    PRE,
+    TEXTAREA
+};
+
+typedef struct parser{
+    enum mode state;
+    char quote;
+    int pending_space;
+}parser;
+
 typedef struct line line_T;
-typedef struct lines Lines;
 
 struct line{
     char *start;
     size_t len;
 };
 
-struct lines{
-    line_T *first;
-    Lines *next;
-};
-
 int get_line(char *buf,size_t buf_s, line_T* lc);
 int HTML_parse_line(line_T *line,uint32_t *flags);
 void compact_str(char *str, size_t size);
 long long find_byte0(uint8_t* buf, size_t s);
+uint8_t *HTML_minimize(uint8_t *file_content, size_t *s);
 
 #endif
