@@ -1139,8 +1139,19 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 	long long size = read_file(file_name,&file_content);
 	if(size == -1) return -1;
 
+	int file_name_l = (int)strlen(file_name);
+	char compressed_file_name[file_name_l+4];
+	memset(compressed_file_name,0,file_name_l+4);
+
+	memcpy(compressed_file_name,file_name,file_name_l);
+	memcpy(&compressed_file_name[file_name_l],".gz",4);
+
 	if(size <= limit) {
 		free(file_content);
+		/*if .gz exist for this file then delete*/
+		if(file_exist(compressed_file_name)){
+			del_file(compressed_file_name);
+		}
 		return 0;
 	}
 
@@ -1148,15 +1159,13 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
       file_content = HTML_minimize(file_content,(size_t*)&size); 
       if(size <= limit){
 		free(file_content);
+		/*if .gz exist for this file then delete*/
+		if(file_exist(compressed_file_name)){
+			del_file(compressed_file_name);
+		}
 		return 0;
       }
     }     
-	int file_name_l = (int)strlen(file_name);
-	char compressed_file_name[file_name_l+4];
-	memset(compressed_file_name,0,file_name_l+4);
-
-	strncpy(compressed_file_name,file_name,file_name_l);
-	strncat(compressed_file_name,".gz",4);
 
 	uint8_t *deflated_stream = NULL;
 	long long comp_size = deflate(file_content,size,&deflated_stream);
@@ -1208,7 +1217,7 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 		free(deflated_stream);
 		free(writable_out);
 		if(res == -1) return -1;
-		return 0;
+		return bwritten;
 	}
 
 	free(deflated_stream);
@@ -1231,7 +1240,7 @@ static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t
 
 	uint8_t *input = malloc(deflate_size);
 	if(!input){ 
-		free(inflated_outup);
+		free(*inflated_outup);
 		return -1;
 	}
 

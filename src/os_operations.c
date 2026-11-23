@@ -273,18 +273,19 @@ again:
 
 				if(strlen(c+1) != strlen(ex)) continue;
 				if(strncmp(c+1,ex,strlen(ex)) != 0) continue;
-				found++;
 
                 /*if compressing html files, we minimized */
                 int min = 0;
                 if( strncmp(ex,"html",4) == 0) min = 1;
 
 				uint8_t *p = NULL;
-				if(gzip_callback(dir->d_name,M_FILE,&p,1024,min) == -1){
+				long long size = 0;
+				if((size = gzip_callback(dir->d_name,M_FILE,&p,1024,min)) == -1){
 					closedir(s);
 					return -1;
 				};
 
+				if(size) found++;
 				free(p);
 				break;
 			}
@@ -294,6 +295,7 @@ again:
 	closedir(s);
 #elif defined(_WIN32) || defined(_WIN64)
 
+	/*TODO*/
 #endif
 	if(found) 
 		printf("%d files compressed\n",found);
@@ -301,4 +303,24 @@ again:
 		printf("no files found to compress\n");
 
 	return 0;
+}
+
+int del_file(char *file_name)
+{
+#if defined(__linux__) || defined(__APPLE__)
+	if(unlink(file_name) == -1) return -1;
+#elif defined(_WIN32) || defined(_WIN64)
+	/*TODO*/
+#endif
+	return 0;
+}
+
+int file_exist(char *file_name)
+{
+
+	FILE *fp = fopen(file_name,"r");
+	if(!fp) return 0;
+
+	fclose(fp);
+	return 1;
 }
