@@ -311,7 +311,7 @@ int del_file(char *file_name)
 {
 #if defined(__linux__) || defined(__APPLE__)
 	errno = 0;
-	if(unlink(file_name) || errno == ENOENT) return 0;
+	if(unlink(file_name) == 0 || errno == ENOENT) return 0;
 	return -1;
 #elif defined(_WIN32) || defined(_WIN64)
 	/*TODO*/
