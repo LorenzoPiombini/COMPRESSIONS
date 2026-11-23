@@ -180,15 +180,30 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 	if(!path_exist(compressed_file_name)){
 		if(create_folder(compressed_file_name) == -1) return -1;
 	}
-	FILE *fp = fopen(compressed_file_name,"wb");
-	if(!fp) return -1;
+#if defined(__linux__) || defined(__APPLE__)
+	int fd = open(compressed_file_name,O_WRONLY | O_TRUNC | O_NOFOLLOW);
+	if (!fd) return -1;
 
-	if(fwrite(data,1,size,fp) != size) {
-		fclose(fp);
+	ssize_t ss = 0;
+	if ((ss = write(fd,data,size)) == -1 ) {
+		close(fd);
 		return -1;
 	}
 
-	fclose(fp);
+	if (ss > 0 && ss < (ssize_t)size){
+repeat:
+		ssize_t s = 0;
+		if((s = write(fd,&data[ss],size - (size_t)ss)) == -1){
+			close(fd);
+			return -1;
+		}
+		if(ss + s < (ssize_t) size){
+			ss += s;
+			goto repeat;
+		}
+	}
+
+	close(fd);
 	return 0;
 }
 
