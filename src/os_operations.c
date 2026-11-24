@@ -182,25 +182,17 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 #if defined(__linux__) || defined(__APPLE__)
 #define TMP_FILE "./tmp.packed"
 	/*create a temp file */
-	int flags = O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_TRUNC | O_EXCL;
+	int flags = O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_EXCL;
 	int fd = open( TMP_FILE,flags,0700);
 	if (fd == -1) return -1;
 
 	ssize_t ss = 0;
-	if ((ss = write(fd,data,size)) == -1 ) {
-		close(fd);
-		if(del_file(TMP_FILE) == -1) fprintf(stderr,"could not delete temporary file");
-		return -1;
-	}
+	if ((ss = write(fd,data,size)) == -1 ) goto clean_temp;
 
 	if (ss > 0 && ss < (ssize_t)size){
 repeat:
 		ssize_t s = 0;
-		if((s = write(fd,&data[ss],size - (size_t)ss)) == -1){
-			if(del_file(TMP_FILE) == -1) fprintf(stderr,"could not delete temporary file");
-			close(fd);
-			return -1;
-		}
+		if((s = write(fd,&data[ss],size - (size_t)ss)) == -1) goto clean_temp;
 
 		if(ss + s > 0
 			 && ss + s < (ssize_t) size){
@@ -208,42 +200,43 @@ repeat:
 			goto repeat;
 		}
 	}
+
 	if(ss == 0){
 		fprintf(stderr,"unable to write to the file");
-		if(del_file(TMP_FILE) == -1) fprintf(stderr,"could not delete temporary file");
-		close(fd);
-		return -1;
+		goto clean_temp;
 	}
 
 	errno = 0;
 	fsync(fd);	
 	if(errno != 0){
-		if( errno == EIO){ 
-			fprintf(stderr,"an error occured in I\\O operation\n");
-		}
-		return -1;
+		if( errno == EIO) fprintf(stderr,"an error occured in I\\O operation\n");
+		goto clean_temp;
 	}
 
 	if(close(fd) == -1){
-		if (errno == EINTR){
-			fprintf(stderr,"close() was interuped\n");
-		}
-		return -1;
+		if (errno == EINTR) fprintf(stderr,"close() was interuped\n");
+		fd = -1;
+		goto clean_temp;
 	}
 
-	if(rename(TMP_FILE,compressed_file_name) == -1){ 
-		if(del_file(TMP_FILE) == -1){
-			fprintf(stderr,"could not delete temporary file");
-		}
-		return -1;
-	}
+	fd = -1;
+	if(rename(TMP_FILE,compressed_file_name) == -1) goto clean_temp;
 
+	return 0;
+clean_temp:
+	if(fd != -1){
+		if(close(fd) == -1){
+			if (errno == EINTR) fprintf(stderr,"close() was interuped\n");
+			fd = -1;
+		}
+	}
+	if(del_file(TMP_FILE) == -1) fprintf(stderr,"could not delete temporary file");
+	return -1;
 #undef TMP_FILE
 
 #elif defined(_WIN32) || defined(_WIN64)
 
 #endif
-	return 0;
 }
 
 static int is_path_legal(const char *p)
