@@ -181,6 +181,7 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 		if(create_folder(compressed_file_name) == -1) return -1;
 	}
 #if defined(__linux__) || defined(__APPLE__)
+	/*create a temp file */
 	int flags = O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_TRUNC | O_EXCL;
 	int fd = open( "./tmp.gz",flags,0700);
 	if (fd == -1) return -1;
@@ -222,7 +223,12 @@ repeat:
 		}
 	}
 
-	if(rename("./tmp.gz",compressed_file_name) == -1) return -1;
+	if(rename("./tmp.gz",compressed_file_name) == -1){ 
+		if(del_file("./tmp.gz") == -1){
+			fprintf(stderr,"could not delete temporary file");
+		}
+		return -1;
+	}
 #elif defined(_WIN32) || defined(_WIN64)
 
 #endif
