@@ -183,7 +183,7 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 #define TMP_FILE "./tmp.packed"
 	/*create a temp file */
 	int flags = O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_EXCL;
-	int fd = open( TMP_FILE,flags,0700);
+	int fd = open( TMP_FILE,flags,0640);
 	if (fd == -1) return -1;
 
 	ssize_t ss = 0;
