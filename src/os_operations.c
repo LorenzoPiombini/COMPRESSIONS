@@ -181,9 +181,8 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 		if(create_folder(compressed_file_name) == -1) return -1;
 	}
 #if defined(__linux__) || defined(__APPLE__)
-	int fd = open( 	compressed_file_name,
-					O_CREAT | O_WRONLY | O_NOFOLLOW | O_CLOEXEC | O_TRUNC,
-					0700);
+	int flags = O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_TRUNC | O_EXCL;
+	int fd = open( "./tmp.gz",flags,0700);
 	if (fd == -1) return -1;
 
 	ssize_t ss = 0;
@@ -207,7 +206,23 @@ repeat:
 		}
 	}
 
-	close(fd);
+	errno = 0;
+	fsync(fd);	
+	if(errno != 0){
+		if( errno == EIO){ 
+			fprintf(stderr,"an error occured in I\\O operation\n");
+			return -1;
+		}
+	}
+
+	if(close(fd) == -1){
+		if (errno == EINTR){
+			fprintf(stderr,"close() was interuped\n");
+			return -1;
+		}
+	}
+
+	if(rename("./tmp.gz",compressed_file_name) == -1) return -1;
 #elif defined(_WIN32) || defined(_WIN64)
 
 #endif
