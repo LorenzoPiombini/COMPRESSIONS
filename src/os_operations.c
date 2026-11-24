@@ -175,20 +175,21 @@ long long read_file(char *file_name, uint8_t **file_content)
 
 int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 {
-
 	if(!is_path_legal(compressed_file_name)) return -1;
 	if(!path_exist(compressed_file_name)){
 		if(create_folder(compressed_file_name) == -1) return -1;
 	}
 #if defined(__linux__) || defined(__APPLE__)
+#define TMP_FILE "./tmp.packed"
 	/*create a temp file */
 	int flags = O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_TRUNC | O_EXCL;
-	int fd = open( "./tmp.gz",flags,0700);
+	int fd = open( TMP_FILE,flags,0700);
 	if (fd == -1) return -1;
 
 	ssize_t ss = 0;
 	if ((ss = write(fd,data,size)) == -1 ) {
 		close(fd);
+		if(del_file(TMP_FILE) == -1) fprintf(stderr,"could not delete temporary file");
 		return -1;
 	}
 
@@ -196,6 +197,7 @@ int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
 repeat:
 		ssize_t s = 0;
 		if((s = write(fd,&data[ss],size - (size_t)ss)) == -1){
+			if(del_file(TMP_FILE) == -1) fprintf(stderr,"could not delete temporary file");
 			close(fd);
 			return -1;
 		}
@@ -206,29 +208,38 @@ repeat:
 			goto repeat;
 		}
 	}
+	if(ss == 0){
+		fprintf(stderr,"unable to write to the file");
+		if(del_file(TMP_FILE) == -1) fprintf(stderr,"could not delete temporary file");
+		close(fd);
+		return -1;
+	}
 
 	errno = 0;
 	fsync(fd);	
 	if(errno != 0){
 		if( errno == EIO){ 
 			fprintf(stderr,"an error occured in I\\O operation\n");
-			return -1;
 		}
+		return -1;
 	}
 
 	if(close(fd) == -1){
 		if (errno == EINTR){
 			fprintf(stderr,"close() was interuped\n");
-			return -1;
 		}
+		return -1;
 	}
 
-	if(rename("./tmp.gz",compressed_file_name) == -1){ 
-		if(del_file("./tmp.gz") == -1){
+	if(rename(TMP_FILE,compressed_file_name) == -1){ 
+		if(del_file(TMP_FILE) == -1){
 			fprintf(stderr,"could not delete temporary file");
 		}
 		return -1;
 	}
+
+#undef TMP_FILE
+
 #elif defined(_WIN32) || defined(_WIN64)
 
 #endif

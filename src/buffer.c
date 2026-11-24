@@ -25,12 +25,12 @@ int get_line(char *buf,size_t buf_s, line_T* lc)
 
     /*get the line from buf*/
     char *p = buf;
-    while((p - buf) < buf_s && *p != '\n') p++;
+    while((size_t)(p - buf) < buf_s && *p != '\n') p++;
     
     
     int line_len = p - buf;   
     /*include '\n' if found*/
-    if(p - buf < buf_s) line_len++;
+    if((size_t)(p - buf) < buf_s) line_len++;
 
     lc->start = buf;
     lc->len = line_len;
@@ -39,7 +39,6 @@ int get_line(char *buf,size_t buf_s, line_T* lc)
 
 static int strip_nt(char *str,size_t s,uint32_t *flags)
 {
-    size_t j = 0;
     for(size_t i = 0; i < s;i++){
         
         switch(str[i]){
@@ -339,6 +338,7 @@ static int HTML_clear_white_space(char *str,size_t s)
     }
 #undef bound_check
     compact_str(str,s);
+	return 0;
 }
 
 long long find_byte0(uint8_t *buf,size_t s)
@@ -378,8 +378,8 @@ uint8_t *HTML_minimize(uint8_t *file_content, size_t *s)
 {
     line_T lc = {0};
     uint8_t *start = file_content;
-    int mlc = 0;
-    while(file_content - start < *s 
+    uint32_t mlc = 0;
+    while((size_t)(file_content - start) < *s 
             && get_line((char *)file_content,
                 *s - (file_content - start),&lc) != EOF){
 
@@ -387,7 +387,7 @@ uint8_t *HTML_minimize(uint8_t *file_content, size_t *s)
         file_content += lc.len;
     }
 
-    compact_str(start,*s);
+    compact_str((char*)start,*s);
     long long ns = 0;
     if((ns = find_byte0(start,*s)) != -1) *s = (size_t) ns;
     return start;
