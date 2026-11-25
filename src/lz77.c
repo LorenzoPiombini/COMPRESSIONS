@@ -1229,13 +1229,14 @@ static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t
 
 	uint64_t deflate_size = file_size - 8 - deflate_stream_offset;
 	*inflated_outup = malloc(size_of_inflated);
-	if(!inflated_outup) return -1;
+	if(!(*inflated_outup)) return -1;
 	memset(*inflated_outup,0,size_of_inflated);
 	*inflated_outup_size = (uint64_t)size_of_inflated;
 
 	uint8_t *input = malloc(deflate_size);
 	if(!input){ 
 		free(*inflated_outup);
+		*inflated_outup = NULL;
 		return -1;
 	}
 
