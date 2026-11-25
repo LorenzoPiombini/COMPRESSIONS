@@ -140,37 +140,70 @@ int create_folder(char *file_name)
 
 long long read_file(char *file_name, uint8_t **file_content)
 {
-	FILE *fp = fopen(file_name,"rb");
-	if(!fp) return -1;
+#if defined(__linux__) || defined(__APPLE__) 
+	int value_error = 0;
+	int fd = open(file_name,O_NOFOLLOW | O_RDONLY  | O_CLOEXEC);
+	if (fd == -1) return -1;
 
-	if(fseek(fp,0,SEEK_END) == -1){
-		fclose(fp);
-		return -1;
-	}
-
-	long long size = 0;
-	if((size = ftell(fp)) == -1){
-		fclose(fp);
-		return -1;
-	}
-
-	rewind(fp);
-		
-	*file_content = malloc(size);
-	if(!(*file_content)){
-		fclose(fp);
-		return -1;
+	struct stat st;
+	if (fstat(fd,&st) == -1) {
+		fprintf(stderr,"fstat() fialed.\n");	
+		value_error = -1;
+		goto fail;
 	}
 	
-	memset(*file_content,0,size);
-	if((long long)fread(*file_content,1,size,fp) != size){
-		fclose(fp);
-		free(*file_content);
-		return -1;
+	if (!S_ISREG(st.st_mode)) {
+		fprintf(stderr,"it is not a regular file\n");
+		value_error = -3;
+		goto fail;
 	}
 
-	fclose(fp);
-	return size;
+	/*here is a regular file no FIFO no socket etc.*/
+	*file_content = malloc(st.st_size);
+	if(!(*file_content)){
+		fprintf(stderr, "not enough memory\n.");
+		value_error = -2;
+		goto fail;
+	}
+	memset(*file_content,0,st.st_size);
+
+	ssize_t bread = 0, total_read = 0;
+	size_t left_to_read = (size_t)st.st_size;
+	while ((bread = read(fd,&(*file_content)[total_read],left_to_read)) > 0) {
+		total_read += bread;
+		if (total_read == (ssize_t)st.st_size) break; 
+		left_to_read -= (size_t)bread; 
+	}
+	
+	if (bread == -1 || total_read == 0) {
+		value_error = -1;
+		goto fail;
+	}
+	/*here we have the file content*/
+
+	
+	errno = 0;
+	int r = fsync(fd);
+	if (r == -1) goto fail;
+
+	if (close(fd) == -1)
+			fprintf(stderr, "close(fd) failed.\n");
+	
+	return (long long) bread;
+fail:
+	if (fd != -1) {
+		if (close(fd) == -1) {
+			fprintf(stderr, "close(fd) failed.\n");
+		}
+	}
+	if (*file_content) {
+		free(*file_content);
+		*file_content = NULL;
+	}
+	return value_error;
+#elif defined(_WIN32) || defined(_WIN64)
+
+#endif
 }
 
 int write_file(char *compressed_file_name,uint8_t *data, uint64_t size)
