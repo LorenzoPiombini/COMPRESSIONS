@@ -1222,6 +1222,7 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 
 static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t **inflated_outup, uint64_t *inflated_outup_size)
 {
+	*inflated_outup_size = 0;
 	uint32_t crc32_from_file = 0;
 	uint32_t size_of_inflated = 0; 
 	long deflate_stream_offset = read_Gzip_header(file_content,file_size, &crc32_from_file,&size_of_inflated);
@@ -1231,7 +1232,6 @@ static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t
 	*inflated_outup = malloc(size_of_inflated);
 	if(!(*inflated_outup)) return -1;
 	memset(*inflated_outup,0,size_of_inflated);
-	*inflated_outup_size = (uint64_t)size_of_inflated;
 
 	uint8_t *input = malloc(deflate_size);
 	if(!input){ 
@@ -1267,6 +1267,7 @@ static long long inflate_GZIP(uint8_t *file_content, uint64_t file_size, uint8_t
 		return -1;
 	}
 
+	*inflated_outup_size = (uint64_t)size_of_inflated;
 	free(input);
 	return 0;
 }
