@@ -1108,8 +1108,14 @@ int F_unGzip(char *file_name){
 	strncpy(f_name,file_name,extension - file_name +1);
 
 	uint8_t *file_content = NULL;
+	/*read file return either the size 
+		or -1 error
+		or -2 is malloc error
+		or -3 is not a regular file do we can return 0*/
 	long long size = read_file("lorem.txt",&file_content);
-	if(size == -1) return -1;
+	if (size == -3) return 0;
+	if(size == -1 
+		|| size == -2 ) return -1;
 
 	uint8_t *inflated_outup = NULL;
 	uint64_t inflated_outup_size = 0;
