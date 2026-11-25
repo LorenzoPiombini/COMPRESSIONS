@@ -1,7 +1,7 @@
 # COMPRESSIONS — current issues
 
-Reviewed commit: `f82e39a033a9801bbbda8f063a12dc1952edc1f6`
-(`fix(): tmp file mode`).
+Reviewed commit: `27ee46dc510c6848c6fa0d36f6d3d5197b3024d0`
+(`Merge pull request #2 from LorenzoPiombini/fix-inflate-gzip-arg-size`).
 
 This file intentionally lists only open findings. Resolved findings have been
 removed. The primary scope is the proposed WSER asset pipeline:
@@ -60,7 +60,7 @@ sidecar.
 
 ### 3 — P2: The asset CLI always scans the current directory
 
-**Location:** `src/main.c:55–86`, `src/os_operations.c:291`.
+**Location:** `src/main.c:55–86`, `src/os_operations.c:291–355`.
 
 `main()` ignores its arguments and always runs `browse_dir()` against `.` with
 the hardcoded extension set `html.css.js` and a hardcoded 1,024-byte threshold.
@@ -111,18 +111,3 @@ complete gzip length.
 
 **Required behavior:** Document the exact current prototypes and the ownership,
 length, skip, and error contracts before publishing a library package.
-
-## Other current library safety issues
-
-### 7 — P1 when using decompression: The output allocation check is invalid
-
-**Location:** `src/lz77.c:1223–1257` (`inflate_GZIP`).
-
-After allocating `*inflated_outup`, the code checks `inflated_outup` instead of
-`*inflated_outup`. If allocation fails, execution can continue to `memset()` a
-null pointer. Cleanup of the later input-allocation failure now frees the
-correct pointer, but it does not reset the caller's pointer or output size.
-
-**Required behavior:** Initialize outputs to `NULL` and zero, check
-`*inflated_outup`, and restore the initialized output state on every failure
-path. Exercise allocation failures in regression tests.
