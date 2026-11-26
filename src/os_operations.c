@@ -141,9 +141,11 @@ int create_folder(char *file_name)
 long long read_file(char *file_name, uint8_t **file_content)
 {
 #if defined(__linux__) || defined(__APPLE__) 
+	errno = 0;
 	int value_error = -1;
 	int fd = open(file_name,O_NONBLOCK |  O_NOFOLLOW | O_RDONLY  | O_CLOEXEC);
-	if (fd == -1) return -1;
+	if (errno == ELOOP) return -3;
+	if (fd == -1 && errno != ELOOP) return -3;
 
 	struct stat st;
 	if (fstat(fd,&st) == -1) {
