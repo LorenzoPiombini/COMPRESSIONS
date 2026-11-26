@@ -14,11 +14,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-	
-	stratgy:
-		fail-fast:false
+
+	strategy:
+		fail-fast: false
 		matrix:
-			compiler:[gcc, clang]
+        	compiler: [gcc, clang]	
 
     steps:
       - name: Checkout source code
