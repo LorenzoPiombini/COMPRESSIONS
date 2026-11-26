@@ -175,6 +175,7 @@ long long read_file(char *file_name, uint8_t **file_content)
 		value_error = -1;
 		goto fail;
 	}
+
 	*file_content = malloc(st.st_size);
 	if(!(*file_content)){
 		fprintf(stderr, "not enough memory\n.");
@@ -212,6 +213,7 @@ fail:
 			fprintf(stderr, "close(fd) failed.\n");
 		}
 	}
+
 	if (*file_content) {
 		free(*file_content);
 		*file_content = NULL;
