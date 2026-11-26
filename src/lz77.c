@@ -1161,12 +1161,14 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 	}
 
     if(min){
-      file_content = HTML_minimize(file_content,(size_t*)&size); 
-      if(size <= limit){
+		size_t sz = (size_t) size; 
+      file_content = HTML_minimize(file_content,&sz); 
+      if(sz <= (size_t)limit){
 		free(file_content);
 		if(mode != M_FILE) return 0;
 		return del_file(compressed_file_name);
       }
+	 size = (long long)sz;
     }     
 
 	uint8_t *deflated_stream = NULL;
