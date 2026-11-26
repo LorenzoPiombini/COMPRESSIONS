@@ -1,7 +1,7 @@
 # COMPRESSIONS — current issues
 
-Reviewed commit: `27ee46dc510c6848c6fa0d36f6d3d5197b3024d0`
-(`Merge pull request #2 from LorenzoPiombini/fix-inflate-gzip-arg-size`).
+Reviewed commit: `2fdf4f5e327e6d10e6379bd00b730816d0422959`
+(`fix-ci-workflow-2`).
 
 This file intentionally lists only open findings. Resolved findings have been
 removed. The primary scope is the proposed WSER asset pipeline:
@@ -18,28 +18,9 @@ priority cleanup or documentation.
 
 ## WSER precompressed-asset path
 
-### 1 — P1: The scanner accepts FIFOs, symlinks, and other non-regular sources
+### 1 — P3: Temporary-output recovery and I/O checks remain fragile
 
-**Location:** `src/os_operations.c:141–173`, `src/os_operations.c:291–355`.
-
-The scanner excludes only entries reported as `DT_DIR`. A matching FIFO is
-passed to `F_Gzip()` and blocks in `fopen()`; the test process remained blocked
-until a two-second timeout. Matching source symlinks are followed and can point
-outside the intended asset directory. `d_type` can also be `DT_UNKNOWN`, so it
-is not a complete type check.
-
-**Required behavior:** Open entries relative to the directory descriptor,
-reject symlinks according to an explicit policy, and verify with `fstatat()` or
-`fstat()` that each opened source is a regular file. Do not process FIFOs,
-sockets, devices, or directories.
-
-**Regression check:** Verify that ordinary assets are processed while FIFOs,
-sockets, directories, and disallowed symlinks are skipped without blocking.
-Include a `DT_UNKNOWN` path.
-
-### 2 — P3: Temporary-output recovery and I/O checks remain fragile
-
-**Location:** `src/os_operations.c:183–233` (`write_file`).
+**Location:** `src/os_operations.c:227–285` (`write_file`).
 
 Successful replacement is now atomic and does not follow a destination
 symlink. The previous sidecar also survives an injected write failure. However,
@@ -58,9 +39,9 @@ normal invocation can recover safely. Inject a zero-byte retry and an `fsync()`
 failure and verify that each returns an error without replacing the old
 sidecar.
 
-### 3 — P2: The asset CLI always scans the current directory
+### 2 — P2: The asset CLI always scans the current directory
 
-**Location:** `src/main.c:55–86`, `src/os_operations.c:291–355`.
+**Location:** `src/main.c:55–86`, `src/os_operations.c:342–405`.
 
 `main()` ignores its arguments and always runs `browse_dir()` against `.` with
 the hardcoded extension set `html.css.js` and a hardcoded 1,024-byte threshold.
@@ -76,9 +57,9 @@ Validate arguments before modifying files, expose extension and size policies
 through deliberate options or configuration, and return nonzero when any
 required output fails.
 
-### 4 — P2: Windows directory compression and sidecar deletion do nothing
+### 3 — P2: Windows directory compression and sidecar deletion do nothing
 
-**Location:** `src/os_operations.c:345–366`, `README.md:7`.
+**Location:** `src/os_operations.c:396–417`, `README.md:7`.
 
 The Windows branches of `browse_dir()` and `del_file()` are empty and report
 success. This conflicts with the README claim that the program works on Windows
@@ -88,9 +69,9 @@ as-is.
 equivalent suffix, type, close, and error handling, or return an explicit
 unsupported-operation error and narrow the portability claim.
 
-### 5 — P2: HTML minimization passes `long long` storage as `size_t *`
+### 4 — P2: HTML minimization passes `long long` storage as `size_t *`
 
-**Location:** `src/lz77.c:1133–1163`.
+**Location:** `src/lz77.c:1139–1169`.
 
 `size` is a `long long`, but its address is cast to `size_t *` for
 `HTML_minimize()`. Accessing the object through that incompatible type violates
@@ -100,7 +81,7 @@ C aliasing rules and assumes the types have the same size and representation.
 `size_t` variable, pass that variable to the minimizer, and convert back only
 when the API requires it.
 
-### 6 — P3: The README documents an obsolete public API
+### 5 — P3: The README documents an obsolete public API
 
 **Location:** `README.md:9–32`, `include/lz77.h:93–99`.
 
