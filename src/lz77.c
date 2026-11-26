@@ -1144,6 +1144,7 @@ long long F_Gzip(char *file_name, int mode,uint8_t **buffer, int limit,int min)
 	uint8_t *file_content = NULL;
 	long long size = read_file(file_name,&file_content);
 	if(size == -1) return -1;
+	if(size == -3) return 0;
 
 	int file_name_l = (int)strlen(file_name);
 	char compressed_file_name[file_name_l+4];
