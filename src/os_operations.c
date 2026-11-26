@@ -163,7 +163,14 @@ long long read_file(char *file_name, uint8_t **file_content)
 	/*here is a regular file no FIFO no socket etc.*/
 	/*restore blocking op*/
 
-	if (fcntl(fd, fcntl(fd, F_GETFL) & ~O_NONBLOCK) == -1) {
+	int flags = fcntl(fd, F_GETFL);
+	if (flags == -1) {
+		fprintf(stderr, "cannot get flags from file\n.");
+		value_error = -1;
+		goto fail;
+	}
+
+	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == -1) {
 		fprintf(stderr, "cannot set non blocking ops\n.");
 		value_error = -1;
 		goto fail;
