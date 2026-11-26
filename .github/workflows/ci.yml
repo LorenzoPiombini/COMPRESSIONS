@@ -1,12 +1,11 @@
-
 name: C Continuous Integration
 
 on:
   push:
     branches: [main]
-
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,20 +14,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-  	strategy:
-   	  fail-fast: false
+    strategy:
+      fail-fast: false
       matrix:
-        compiler: [gcc, clang]  
+        distro: ['ubuntu:26.04', 'fedora:44']
+
+    container:
+      image: ${{ matrix.distro }}
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v6
-
-      - name: Install dependencies
+      - name: Install Ubuntu dependencies
+        if: startsWith(matrix.distro, 'ubuntu')
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
+          apt-get update
+          apt-get install -y build-essential git
+
+      - name: Install Fedora dependencies
+        if: startsWith(matrix.distro, 'fedora')
+        run: |
+          dnf install -y gcc make git binutils
+
+      - uses: actions/checkout@v6
 
       - name: Compile
         run: make
-
