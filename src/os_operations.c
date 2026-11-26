@@ -145,7 +145,7 @@ long long read_file(char *file_name, uint8_t **file_content)
 	int value_error = -1;
 	int fd = open(file_name,O_NONBLOCK |  O_NOFOLLOW | O_RDONLY  | O_CLOEXEC);
 	if (errno == ELOOP) return -3;
-	if (fd == -1 && errno != ELOOP) return -3;
+	if (fd == -1 && errno != ELOOP) return -1;
 
 	struct stat st;
 	if (fstat(fd,&st) == -1) {
