@@ -141,8 +141,8 @@ int create_folder(char *file_name)
 long long read_file(char *file_name, uint8_t **file_content)
 {
 #if defined(__linux__) || defined(__APPLE__) 
-	int value_error = 0;
-	int fd = open(file_name,O_NOFOLLOW | O_RDONLY  | O_CLOEXEC);
+	int value_error = -1;
+	int fd = open(file_name,O_NONBLOCK |  O_NOFOLLOW | O_RDONLY  | O_CLOEXEC);
 	if (fd == -1) return -1;
 
 	struct stat st;
@@ -159,6 +159,13 @@ long long read_file(char *file_name, uint8_t **file_content)
 	}
 
 	/*here is a regular file no FIFO no socket etc.*/
+	/*restore blocking op*/
+
+	if (fcntl(fd, fcntl(fd, F_GETFL) & ~O_NONBLOCK) == -1) {
+		fprintf(stderr, "cannot set non blocking ops\n.");
+		value_error = -1;
+		goto fail;
+	}
 	*file_content = malloc(st.st_size);
 	if(!(*file_content)){
 		fprintf(stderr, "not enough memory\n.");
@@ -189,7 +196,7 @@ long long read_file(char *file_name, uint8_t **file_content)
 	if (close(fd) == -1)
 			fprintf(stderr, "close(fd) failed.\n");
 	
-	return (long long) bread;
+	return (long long) total_read;
 fail:
 	if (fd != -1) {
 		if (close(fd) == -1) {
